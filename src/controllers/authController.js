@@ -22,9 +22,14 @@ async function login(req, res) {
     return res.status(400).json({ success: false, message: 'Vui lòng nhập username và password' });
   }
   try {
-    const data = await authService.login(username, password);
-    if (!data) return res.status(401).json({ success: false, message: 'Username hoặc password không đúng' });
-    return res.json({ success: true, message: 'Đăng nhập thành công', data });
+    const result = await authService.login(username, password);
+    if (!result) return res.status(401).json({ success: false, message: 'Username hoặc password không đúng' });
+    return res.json({
+      success: true,
+      message: 'Đăng nhập thành công',
+      token: result.token,
+      data: result.user,
+    });
   } catch (error) {
     return databaseError(res, error, 'Lỗi đăng nhập');
   }

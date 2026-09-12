@@ -1,7 +1,29 @@
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
 
 const PASSWORD_SALT_ROUNDS = 12;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+function createAccessToken(user) {
+  const secret = String(process.env.JWT_SECRET || '').trim();
+  if (!secret) {
+    const error = new Error('Thiếu JWT_SECRET trong file .env');
+    error.statusCode = 500;
+    throw error;
+  }
+
+  return jwt.sign(
+    {
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+      session: user.session,
+    },
+    secret,
+    { expiresIn: JWT_EXPIRES_IN },
+  );
+}
 
 function assertPasswordPolicy(password, label = 'Mật khẩu') {
   const value = String(password || '');
@@ -48,7 +70,11 @@ async function login(username, password) {
     const hash = await bcrypt.hash(String(password), PASSWORD_SALT_ROUNDS);
     await pool.query('UPDATE public.users SET password = $1 WHERE id = $2', [hash, user.id]);
   }
-  return publicUser(user);
+  const safeUser = publicUser(user);
+  return {
+    user: safeUser,
+    token: createAccessToken(safeUser),
+  };
 }
 
 async function register({ name, username, password, role = 'user', session = 'view' }) {
@@ -131,4 +157,5 @@ async function updatePassword(username, password) {
 
 module.exports = {
   login, register, getUsers, getUserById, updateUser, deleteUser, updatePassword,
+  createAccessToken,
 };

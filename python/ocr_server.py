@@ -44,8 +44,9 @@ for tesseract_path in TESSERACT_CANDIDATES:
 SHEET_NAME = "TEST"
 OCR_CONFIDENCE_WARNING = 60
 AI_CONFIDENCE_WARNING = 75
+PI_CURRENCY = "USD"
 DOCUMENTS = {
-    "PI": ["Số HĐ", "Ngày HĐ PI", "Nhà cung cấp", "XUẤT XỨ", "Cảng đến", "Tên hàng", "Giá tổng", "Đơn giá"],
+    "PI": ["Số HĐ", "Ngày HĐ PI", "Nhà cung cấp", "Cảng đến", "Tên hàng", "Giá tổng", "Đơn giá"],
     "INV": ["INV", "Ngày INV"],
     "PKL": ["Số hộp", "Trọng lượng (NET)"],
     "Bill": ["BL NO.", "Số Container", "Hãng tàu", "Cảng đi", "Cảng đến", "ETD"],
@@ -70,15 +71,15 @@ NCC_RECORDS = [
 ]
 
 CARRIER_NAMES = [
-    {"name": "Hapag-Lloyd", "aliases": ["happ", "hapag", "hapag lloyd", "hapag-lloyd"]},
-    {"name": "Maersk", "aliases": ["maersk", "a.p. moller", "apm"]},
+    {"name": "HAPAG-LLOYD", "aliases": ["happ", "hapag", "hapag lloyd", "hapag-lloyd"]},
+    {"name": "MAERSK", "aliases": ["maersk", "a.p. moller", "apm"]},
     {"name": "MSC", "aliases": ["msc", "mediterranean shipping", "mediterranean shipping company", "mediterranean shipping company s.a."]},
     {"name": "CMA CGM", "aliases": ["cma", "cma cgm"]},
     {"name": "COSCO", "aliases": ["cosco", "cosco shipping"]},
     {"name": "HMM", "aliases": ["hmm", "hyundai merchant marine"]},
     {"name": "FESCO", "aliases": ["fesco"]},
-    {"name": "Yang Ming", "aliases": ["yang ming", "yangming", "yml"]},
-    {"name": "CKLINE", "aliases": ["ckline", "ck line", "ckl"]},
+    {"name": "YML", "aliases": ["yang ming", "yangming", "yml"]},
+    {"name": "CK LINE", "aliases": ["ckline", "ck line", "ckl"]},
     {"name": "EVERGREEN", "aliases": ["evergreen", "evergreen marine", "ever", "emc", "shipmentlink"]},
     {"name": "ONE", "aliases": ["one", "one line", "one cargo"]},
     {"name": "OOCL", "aliases": ["oocl", "oocl shipping"]},
@@ -131,6 +132,7 @@ DOCUMENT_INSTRUCTIONS = {
     "PKL": """QUY TẮC CHO PKL:
 - PKL có nhiều dòng chi tiết theo từng thùng/lô nên bắt buộc đọc đúng tiêu đề và thứ tự cột.
 - Số hộp là tổng BOXES, CARTONS hoặc CAJAS.
+- Chỉ cần trả về số lượng kiện dạng số; không bắt buộc phải nhận diện hoặc trả về đơn vị kiện hàng (thùng, carton, box...).
 - Trọng lượng (NET) là tổng NET WEIGHT, tức trọng lượng tịnh.
 - Nếu có dòng TOTAL, lấy các giá trị trên dòng TOTAL rồi cộng lại toàn bộ dòng chi tiết để kiểm tra.
 - Nếu không có TOTAL rõ ràng, được phép cộng tất cả dòng chi tiết hợp lệ và dùng kết quả tính được.
@@ -383,7 +385,7 @@ QUY TẮC CHUẨN HÓA HÃNG TÀU:
 - Đối chiếu alias và ngữ cảnh toàn bộ chứng từ. Ví dụ Mediterranean Shipping Company S.A. → MSC.
 - Nếu không khớp một hãng trong danh sách thì để trống Hãng tàu; không tự tạo mã hoặc tên viết tắt.
 """
-    if doc_type == "PI":
+    if False and doc_type == "PI":
         supplier_records = json.dumps(
             [
                 {"name": record["name"], "country": record["country"]}
@@ -411,6 +413,7 @@ Toàn bộ chỉ dẫn và phần giải thích phải dùng tiếng Việt.
 YÊU CẦU ĐẦU RA:
 - Chỉ trả về một JSON object hợp lệ, không markdown và không thêm văn bản bên ngoài.
 - Giữ nguyên chính xác các key nghiệp vụ: {json.dumps(fields, ensure_ascii=False)}.
+- Không trích xuất hoặc trả về trường Xuất xứ nếu trường này không nằm trong danh sách key nghiệp vụ.
 - Thêm _confidence từ 0 đến 100.
 - Thêm _reason để giải thích ngắn gọn nguồn và cách xác định từng giá trị.
 - Ngày được chuẩn hóa sang DD/MM/YYYY.
@@ -429,6 +432,10 @@ NGUYÊN TẮC CHUNG:
   không được tính toán hoặc tự tạo các giá trị này.
 
 {NUMBER_FORMAT_INSTRUCTIONS}
+
+QUY TẮC RIÊNG CHO TIỀN PI:
+- Đơn vị tiền thanh toán và các trường Giá tổng/Đơn giá luôn là USD.
+- Không trả về EUR, VND hoặc loại tiền khác; không cần suy đoán hay quy đổi sang loại tiền khác.
 
 {supplier_rule}
 {carrier_rule}
@@ -454,7 +461,6 @@ def analyze_with_openrouter(ocr_text, doc_type):
     result = dict(model_result)
     normalize_result_formats(result, doc_type, ocr_text)
     if doc_type == "PI":
-        reconcile_pi_supplier(result, ocr_text)
         reconcile_pi_total(result, ocr_text)
     elif doc_type == "INV":
         reconcile_invoice_number(result, ocr_text)
@@ -607,8 +613,8 @@ def detect_currency(value, ocr_text):
 
 def normalize_money(value, ocr_text):
     """Chuẩn hóa số tiền và giữ nguyên loại tiền của chứng từ."""
-    currency = detect_currency(value, ocr_text)
-    decimal_places = 0 if currency == "VND" else 2
+    currency = PI_CURRENCY
+    decimal_places = 2
     amount = format_number(
         value,
         decimal_places=decimal_places,
@@ -639,7 +645,7 @@ def extract_pi_payment_total(ocr_text):
         if not percent_match or not amount_match:
             continue
         amount = parse_calculation_number(amount_match.group(1))
-        currency = detect_currency(line, ocr_text)
+        currency = PI_CURRENCY
         if amount is not None and currency:
             payment_parts.append((int(percent_match.group(1)), amount, currency))
 
@@ -647,11 +653,8 @@ def extract_pi_payment_total(ocr_text):
         return None
     if sum(percent for percent, _, _ in payment_parts) != 100:
         return None
-    currencies = {currency for _, _, currency in payment_parts}
-    if len(currencies) != 1:
-        return None
     total = sum((amount for _, amount, _ in payment_parts), Decimal("0"))
-    return total, currencies.pop(), payment_parts
+    return total, PI_CURRENCY, payment_parts
 
 
 def extract_pi_quantity_price_total(ocr_text):
@@ -674,7 +677,7 @@ def extract_pi_quantity_price_total(ocr_text):
 
     quantity = parse_calculation_number(quantity_match.group(1))
     unit_price = parse_calculation_number(price_match.group(2))
-    currency = detect_currency(price_match.group(0), ocr_text)
+    currency = PI_CURRENCY
     if quantity is None or unit_price is None or not currency:
         return None
 
@@ -761,16 +764,15 @@ def normalize_result_formats(result, doc_type, ocr_text):
             if normalized != original:
                 changed_fields.append(field)
 
-    if doc_type == "PI" and result.get("Giá tổng"):
-        original = result["Giá tổng"]
-        normalized, currency = normalize_money(original, ocr_text)
-        result["Giá tổng"] = normalized
-        if normalized != original:
-            changed_fields.append("Giá tổng")
-        if not currency:
-            result["_format_warning"] = (
-                "Không xác định được loại tiền của Giá tổng; hệ thống không tự đoán."
-            )
+    if doc_type == "PI":
+        for field in ("Giá tổng", "Đơn giá"):
+            if not result.get(field):
+                continue
+            original = result[field]
+            normalized, _ = normalize_money(original, ocr_text)
+            result[field] = normalized
+            if normalized != original:
+                changed_fields.append(field)
 
     if changed_fields:
         note = "Đã chuẩn hóa định dạng: " + ", ".join(changed_fields) + "."

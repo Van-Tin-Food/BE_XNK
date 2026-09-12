@@ -49,6 +49,7 @@ const appsScriptRoutes = require('./routes/appsScriptRoutes');
 const authRouter = require('./routes/authRouter');
 const ocrRoutes = require('./routes/ocrRoutes');
 const trackingRoutes = require('./routes/trackingRoutes');
+const businessRoutes = require('./routes/businessRoutes');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -74,6 +75,7 @@ app.use('/api', appsScriptRoutes);
 app.use('/api/auth', authRouter);
 app.use('/api/ocr', ocrRoutes);
 app.use('/api/tracking', trackingRoutes);
+app.use('/api', businessRoutes);
 
 // ========================================
 // 404 - Route không tồn tại
