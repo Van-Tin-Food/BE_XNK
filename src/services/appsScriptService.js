@@ -1,5 +1,16 @@
 const { APPS_SCRIPT_TIMEOUT, getAppsScriptUrl } = require('../config/appsScript');
 
+const MAX_READ_RETRIES = 2;
+const RETRY_DELAY_MS = 500;
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableStatus(status) {
+  return status === 408 || status === 429 || status >= 500;
+}
+
 function isHtmlOrAuthPage(value) {
   const text = String(value || '').toLowerCase();
   return text.includes('<html') || text.includes('<!doctype') ||
@@ -31,25 +42,50 @@ async function callAppsScript(action, params = {}, method = 'GET', body) {
     }
   });
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), APPS_SCRIPT_TIMEOUT);
-  try {
-    const response = await fetch(url.toString(), {
-      method,
-      redirect: 'follow',
-      headers: {
-        'User-Agent': 'be-app/1.0',
-        Accept: 'application/json,text/plain,*/*',
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-      signal: controller.signal,
-    });
-    return parseResponse(await response.text());
-  } catch (error) {
-    throw error;
-  } finally {
-    clearTimeout(timeout);
+  const normalizedMethod = String(method).toUpperCase();
+  // Chỉ retry GET để không lặp các thao tác ghi như upload/move.
+  const maxAttempts = normalizedMethod === 'GET' ? MAX_READ_RETRIES + 1 : 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), APPS_SCRIPT_TIMEOUT);
+
+    try {
+      const response = await fetch(url.toString(), {
+        method: normalizedMethod,
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'be-app/1.0',
+          Accept: 'application/json,text/plain,*/*',
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        signal: controller.signal,
+      });
+      const responseText = await response.text();
+
+      if (!response.ok && (attempt === maxAttempts || !isRetryableStatus(response.status))) {
+        const error = new Error(`Apps Script HTTP ${response.status}`);
+        error.statusCode = response.status;
+        error.appsScriptResponse = responseText.slice(0, 500);
+        throw error;
+      }
+
+      if (response.ok || attempt === maxAttempts) {
+        return parseResponse(responseText);
+      }
+    } catch (error) {
+      const retryable = error.name === 'AbortError'
+        || error.code === 'ECONNRESET'
+        || error.code === 'ETIMEDOUT'
+        || isRetryableStatus(error.statusCode);
+
+      if (attempt === maxAttempts || !retryable) throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    await wait(RETRY_DELAY_MS * (2 ** (attempt - 1)));
   }
 }
 

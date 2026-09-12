@@ -3,6 +3,15 @@ const pool = require('../config/database');
 
 const PASSWORD_SALT_ROUNDS = 12;
 
+function assertPasswordPolicy(password, label = 'Mật khẩu') {
+  const value = String(password || '');
+  if (value.length < 6 || !/\p{L}/u.test(value) || !/\d/.test(value)) {
+    const error = new Error(`${label} phải có ít nhất 6 ký tự, gồm cả chữ và số`);
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
 function isBcryptHash(value) {
   return /^\$2[aby]?\$\d{2}\$/.test(String(value || ''));
 }
@@ -27,7 +36,13 @@ async function login(username, password) {
     [String(username).trim()],
   );
   const user = result.rows[0];
-  if (!user || !(await verifyPassword(password, user.password))) return null;
+  if (!user) return null;
+
+  const isAdminAll = String(user.role).toLowerCase() === 'admin'
+    && String(user.session).toLowerCase() === 'all';
+  const storedPasswordIsHash = isBcryptHash(user.password);
+  if (!storedPasswordIsHash && !isAdminAll) return null;
+  if (!(await verifyPassword(password, user.password))) return null;
 
   if (!isBcryptHash(user.password)) {
     const hash = await bcrypt.hash(String(password), PASSWORD_SALT_ROUNDS);
@@ -37,6 +52,7 @@ async function login(username, password) {
 }
 
 async function register({ name, username, password, role = 'user', session = 'view' }) {
+  assertPasswordPolicy(password);
   const hash = await bcrypt.hash(String(password), PASSWORD_SALT_ROUNDS);
   const result = await pool.query(
     `INSERT INTO public.users (name, username, password, role, session)
@@ -79,6 +95,7 @@ async function updateUser(id, data) {
   add('role', data.role === undefined ? undefined : String(data.role).trim());
   add('session', data.session === undefined ? undefined : String(data.session).trim());
   if (data.password !== undefined) {
+    assertPasswordPolicy(data.password, 'Mật khẩu mới');
     add('password', await bcrypt.hash(String(data.password), PASSWORD_SALT_ROUNDS));
   }
   if (!fields.length) return null;
@@ -102,6 +119,7 @@ async function deleteUser(id) {
 }
 
 async function updatePassword(username, password) {
+  assertPasswordPolicy(password, 'Mật khẩu mới');
   const hash = await bcrypt.hash(String(password), PASSWORD_SALT_ROUNDS);
   const result = await pool.query(
     `UPDATE public.users SET password = $1 WHERE username = $2

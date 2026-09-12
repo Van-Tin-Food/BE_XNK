@@ -6,6 +6,9 @@ function userId(value) {
 }
 
 function databaseError(res, error, message) {
+  if (error.statusCode === 400) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
   if (error.code === '23505') {
     return res.status(409).json({ success: false, message: 'Username đã tồn tại' });
   }
@@ -31,9 +34,6 @@ async function register(req, res) {
   const { name, username, password, role = 'user', session = 'view' } = req.body || {};
   if (!name || !username || !password) {
     return res.status(400).json({ success: false, message: 'Vui lòng nhập name, username và password' });
-  }
-  if (String(password).length < 6) {
-    return res.status(400).json({ success: false, message: 'Mật khẩu phải có ít nhất 6 ký tự' });
   }
   try {
     const data = await authService.register({ name, username, password, role, session });
@@ -71,9 +71,6 @@ async function updateUser(req, res) {
   if (!Object.keys(data).some((key) => allowed.includes(key))) {
     return res.status(400).json({ success: false, message: 'Không có dữ liệu cần cập nhật' });
   }
-  if (data.password !== undefined && String(data.password).length < 6) {
-    return res.status(400).json({ success: false, message: 'Mật khẩu phải có ít nhất 6 ký tự' });
-  }
   try {
     const result = await authService.updateUser(id, data);
     if (!result) return res.status(404).json({ success: false, message: 'Không tìm thấy user' });
@@ -100,9 +97,6 @@ async function updatePassword(req, res) {
   const nextPassword = newPassword || password;
   if (!username || !nextPassword) {
     return res.status(400).json({ success: false, message: 'Vui lòng nhập username và mật khẩu mới' });
-  }
-  if (String(nextPassword).length < 6) {
-    return res.status(400).json({ success: false, message: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
   }
   try {
     const data = await authService.updatePassword(username, nextPassword);

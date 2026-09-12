@@ -18,11 +18,15 @@ import requests
 from dotenv import load_dotenv
 from PIL import Image
 
-PDF_OCR_DPI = 400
-# A4 ở 400 DPI khoảng 33 triệu pixel; giữ đủ độ phân giải để nhận diện dấu chấm.
-MAX_OCR_PIXELS = 50_000_000
-# Cho phép mở file lớn để có thể thu nhỏ trước khi OCR; đầu vào do người dùng chọn.
-Image.MAX_IMAGE_PIXELS = 300_000_000
+# PDF_OCR_DPI = 300
+# # A4 ở 400 DPI khoảng 33 triệu pixel; giữ đủ độ phân giải để nhận diện dấu chấm.
+# MAX_OCR_PIXELS = 50_000_000
+# # Cho phép mở file lớn để có thể thu nhỏ trước khi OCR; đầu vào do người dùng chọn.
+# Image.MAX_IMAGE_PIXELS = 300_000_000
+
+PDF_OCR_DPI = 200
+MAX_OCR_PIXELS = 8_000_000
+Image.MAX_IMAGE_PIXELS = 30_000_000
 
 load_dotenv()
 OPENROUTER_KEY = os.getenv("open_router_key", "").strip()
@@ -41,10 +45,10 @@ SHEET_NAME = "TEST"
 OCR_CONFIDENCE_WARNING = 60
 AI_CONFIDENCE_WARNING = 75
 DOCUMENTS = {
-    "PI": ["Số HĐ", "Ngày HĐ PI", "Nhà cung cấp", "XUẤT XỨ", "Cảng đến", "Tên hàng", "Giá tổng"],
+    "PI": ["Số HĐ", "Ngày HĐ PI", "Nhà cung cấp", "XUẤT XỨ", "Cảng đến", "Tên hàng", "Giá tổng", "Đơn giá"],
     "INV": ["INV", "Ngày INV"],
-    "PKL": ["Số hộp", "Trọng lượng (NET)", "Trọng lượng cả bì (GROSS)"],
-    "Bill": ["BL NO.", "Số Container", "Hãng tàu", "Cảng đến", "ETD"],
+    "PKL": ["Số hộp", "Trọng lượng (NET)"],
+    "Bill": ["BL NO.", "Số Container", "Hãng tàu", "Cảng đi", "Cảng đến", "ETD"],
 }
 SHEET_FIELDS = tuple(dict.fromkeys(field for fields in DOCUMENTS.values() for field in fields))
 SHEET_COLUMN_BY_FIELD = {
@@ -54,7 +58,6 @@ SHEET_COLUMN_BY_FIELD = {
 # Giữ tương thích với tên cột hiện tại trên Google Sheet.
 SHEET_COLUMN_BY_FIELD.update({
     "Trọng lượng (NET)": "Trọng lượng",
-    "Trọng lượng cả bì (GROSS)": "Trọng lượng cả bì",
 })
 
 NCC_RECORDS = [
@@ -129,12 +132,9 @@ DOCUMENT_INSTRUCTIONS = {
 - PKL có nhiều dòng chi tiết theo từng thùng/lô nên bắt buộc đọc đúng tiêu đề và thứ tự cột.
 - Số hộp là tổng BOXES, CARTONS hoặc CAJAS.
 - Trọng lượng (NET) là tổng NET WEIGHT, tức trọng lượng tịnh.
-- Trọng lượng cả bì (GROSS) là tổng GROSS WEIGHT hoặc PESO BRUTO.
-- Trước khi trả JSON, bắt buộc kiểm tra Trọng lượng cả bì (GROSS) lớn hơn hoặc bằng Trọng lượng (NET).
 - Nếu có dòng TOTAL, lấy các giá trị trên dòng TOTAL rồi cộng lại toàn bộ dòng chi tiết để kiểm tra.
 - Nếu không có TOTAL rõ ràng, được phép cộng tất cả dòng chi tiết hợp lệ và dùng kết quả tính được.
 - Không cộng lặp header, subtotal, dòng TOTAL hoặc dòng bị lặp giữa các trang.
-- Không gán PALLET TARE/TOTAL TARE vào ba trường kết quả. Chỉ dùng GROSS ≈ NET + TARE để kiểm tra.
 - Nếu tổng in sẵn khác tổng tính lại, chọn giá trị hợp lý nhất, giảm _confidence và ghi rõ chênh lệch trong _reason.
 - Trong _reason phải nêu phép cộng hoặc ít nhất số lượng dòng đã cộng cho từng trường.""",
     "Bill": """QUY TẮC CHO BILL:
@@ -144,7 +144,9 @@ DOCUMENT_INSTRUCTIONS = {
 - Hãng tàu là carrier/shipping line, không phải tên tàu/vessel.
 - Hãng tàu bắt buộc chuẩn hóa về đúng một name trong danh sách công ty sử dụng: Hapag-Lloyd, Maersk, MSC, CMA CGM, COSCO, HMM, FESCO, Yang Ming, CKLINE, EVERGREEN, ONE, OOCL, PIL, SINOKOR.
 - Ví dụ: Mediterranean Shipping Company S.A. hoặc Mediterranean Shipping Company phải trả đúng là MSC; Evergreen Marine phải trả EVERGREEN. Nếu không khớp danh sách trên thì để trống, không tự tạo tên viết tắt mới.
+- Cảng đi lấy từ Port of Loading, POL hoặc Place of Receipt theo ngữ cảnh vận chuyển.
 - Cảng đến lấy từ Port of Discharge, POD, Destination hoặc Place of Delivery theo ngữ cảnh vận chuyển.
+- Không được lấy Cảng đi làm Cảng đến hoặc ngược lại.
 - Không lấy Port of Loading, POL hoặc Place of Receipt làm Cảng đến.
 - Cảng đến nếu thuộc khu vực Cat Lai/Hồ Chí Minh thì trả HCM; nếu là Hai Phong/Hải Phòng thì trả HP. Không trả tên cảng đầy đủ.
 - ETD là ngày tàu khởi hành hoặc hàng bắt đầu hành trình; không lấy ETA, ngày đến, ngày phát hành hoặc ngày ký.
@@ -155,7 +157,7 @@ NUMBER_FORMAT_INSTRUCTIONS = """QUY TẮC CHUẨN HÓA SỐ:
 - Được phép sửa dấu phân cách số bị OCR sai dựa trên ngữ cảnh và phép kiểm tra tổng.
 - Dùng dấu chấm phân cách hàng nghìn và dấu phẩy phân cách phần thập phân.
 - Số hộp trả về dạng số nguyên có dấu hàng nghìn, ví dụ 2592 hoặc 2,592 thành 2.592.
-- NET và GROSS trả về 2 chữ số thập phân, ví dụ 25920 hoặc 25,920.00 thành 25.920,00.
+- NET trả về 2 chữ số thập phân, ví dụ 25920 hoặc 25,920.00 thành 25.920,00.
 - Giá tổng trả về theo dạng "số LOẠI_TIỀN", ví dụ 1.250,50 USD, 25.920,00 EUR hoặc 1.000.000 VND.
 - Lấy đúng loại tiền gắn với giá tổng trong chứng từ. Không quy đổi USD, EUR, EURO, VND hoặc VNĐ sang đồng tiền khác.
 - Nếu chứng từ chỉ có ký hiệu tiền tệ, giữ đúng ký hiệu đó khi không đủ căn cứ xác định mã tiền.
@@ -456,8 +458,6 @@ def analyze_with_openrouter(ocr_text, doc_type):
         reconcile_pi_total(result, ocr_text)
     elif doc_type == "INV":
         reconcile_invoice_number(result, ocr_text)
-    elif doc_type == "PKL":
-        reconcile_pkl_weights(result)
     if "Cảng đến" in result:
         original_port = result.get("Cảng đến", "")
         normalized_port = normalize_destination_port(original_port)
@@ -751,7 +751,6 @@ def normalize_result_formats(result, doc_type, ocr_text):
         formats = {
             "Số hộp": {"integer": True},
             "Trọng lượng (NET)": {"decimal_places": 2},
-            "Trọng lượng cả bì (GROSS)": {"decimal_places": 2},
         }
         for field, options in formats.items():
             original = result.get(field, "")
@@ -809,28 +808,6 @@ def reconcile_invoice_number(result, ocr_text):
     )
     result["_reason"] = f"{result.get('_reason', '').strip()} {correction}".strip()
     result["_inv_validation_warning"] = correction
-
-
-def reconcile_pkl_weights(result):
-    """Sửa trường hợp model gán ngược NET/GROSS theo quy tắc vật lý."""
-    net_field = "Trọng lượng (NET)"
-    gross_field = "Trọng lượng cả bì (GROSS)"
-    net = parse_decimal(result.get(net_field))
-    gross = parse_decimal(result.get(gross_field))
-    if net is None or gross is None or gross >= net:
-        return
-
-    result[net_field], result[gross_field] = (
-        result[gross_field],
-        result[net_field],
-    )
-    result["_confidence"] = min(float(result.get("_confidence", 0) or 0), 80)
-    correction = (
-        "Hậu kiểm phát hiện GROSS nhỏ hơn NET nên đã đảo lại hai giá trị "
-        "để bảo đảm Trọng lượng cả bì (GROSS) >= Trọng lượng (NET)."
-    )
-    result["_reason"] = f"{result.get('_reason', '').strip()} {correction}".strip()
-    result["_pkl_validation_warning"] = correction
 
 
 def find_known_supplier(value):
@@ -980,7 +957,6 @@ def analyze_payload(payload):
             final_data = {
                 "Số hộp": data.get("Số hộp", ""),
                 "Trọng lượng": data.get("Trọng lượng (NET)", ""),
-                "Trọng lượng cả bì": data.get("Trọng lượng cả bì (GROSS)", ""),
             }
         return {
             "success": True,
