@@ -11,10 +11,19 @@ function createBusinessController(service) {
       409: 'Dữ liệu bị trùng hoặc vi phạm ràng buộc liên kết',
       500: 'Lỗi cơ sở dữ liệu',
     };
-    console.error('Business data error:', error.message);
+    console.error('Business data error:', {
+      code: error.code,
+      message: error.message,
+      detail: error.detail,
+      constraint: error.constraint,
+      column: error.column,
+      table: error.table,
+    });
     return res.status(status).json({
       success: false,
       message: status === 400 ? error.message : (messages[status] || error.message),
+      errorCode: error.code || null,
+      detail: error.detail || null,
       ...(process.env.NODE_ENV !== 'production' ? { error: error.message } : {}),
     });
   }

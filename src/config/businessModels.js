@@ -14,6 +14,7 @@ module.exports = {
   muaHang: {
     table: 'mua_hang', idColumn: 'ma_hop_dong',
     columns: ['ma_hop_dong', 'ngay_hop_dong', 'ma_inv', 'ngay_inv', 'id_ncc', 'is_deleted'],
+    required: ['ma_hop_dong', 'id_ncc'],
   },
   chiTietMuaHang: {
     table: 'chi_tiet_mua_hang', idColumn: 'id_chi_tiet',
@@ -22,6 +23,12 @@ module.exports = {
   chiTietMuaHangItemCode: {
     table: 'chi_tiet_mua_hang_item_code', idColumn: 'id_item_code',
     columns: ['id_item_code', 'id_chi_tiet', 'ma_nha_may', 'item_code'],
+    fieldAliases: {
+      idItemCode: 'id_item_code',
+      idChiTiet: 'id_chi_tiet',
+      maNhaMay: 'ma_nha_may',
+      itemCode: 'item_code',
+    },
   },
   xnk: {
     table: 'xnk', idColumn: 'ma_bl',

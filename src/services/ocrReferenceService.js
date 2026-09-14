@@ -29,27 +29,30 @@ function matchesName(value, name, aliases = []) {
 async function normalizeOcrReferences(ocrResult) {
   const data = ocrResult?.data;
   if (!data || typeof data !== 'object') return ocrResult;
+  const items = Array.isArray(data) ? data : [data];
 
   const [carrierResult, supplierResult] = await Promise.all([
     pool.query('SELECT id_hang_tau, ten_hang_tau FROM public.hang_tau ORDER BY ten_hang_tau'),
     pool.query('SELECT id_ncc, ten_ncc FROM public.nha_cung_cap ORDER BY ten_ncc'),
   ]);
 
-  const carrier = carrierResult.rows.find((row) => matchesName(
-    data['Hãng tàu'],
-    row.ten_hang_tau,
-    CARRIER_ALIASES[row.ten_hang_tau] || [],
-  ));
-  if (carrier) {
-    data['Hãng tàu'] = carrier.ten_hang_tau;
-    data.id_hang_tau = carrier.id_hang_tau;
-  }
+  items.forEach((item) => {
+    const carrier = carrierResult.rows.find((row) => matchesName(
+      item['Hãng tàu'],
+      row.ten_hang_tau,
+      CARRIER_ALIASES[row.ten_hang_tau] || [],
+    ));
+    if (carrier) {
+      item['Hãng tàu'] = carrier.ten_hang_tau;
+      item.id_hang_tau = carrier.id_hang_tau;
+    }
 
-  const supplier = supplierResult.rows.find((row) => matchesName(data['Nhà cung cấp'], row.ten_ncc));
-  if (supplier) {
-    data['Nhà cung cấp'] = supplier.ten_ncc;
-    data.id_ncc = supplier.id_ncc;
-  }
+    const supplier = supplierResult.rows.find((row) => matchesName(item['Nhà cung cấp'], row.ten_ncc));
+    if (supplier) {
+      item['Nhà cung cấp'] = supplier.ten_ncc;
+      item.id_ncc = supplier.id_ncc;
+    }
+  });
 
   return ocrResult;
 }

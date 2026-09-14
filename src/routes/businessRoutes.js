@@ -25,6 +25,7 @@ for (const [path, controllerName] of resources) {
   router.get(`/${path}/:id`, controller.getById);
   router.post(`/${path}`, controller.create);
   router.patch(`/${path}/:id`, controller.update);
+  router.put(`/${path}/:id`, controller.update);
 }
 
 module.exports = router;

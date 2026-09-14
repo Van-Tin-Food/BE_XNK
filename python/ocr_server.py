@@ -46,7 +46,7 @@ OCR_CONFIDENCE_WARNING = 60
 AI_CONFIDENCE_WARNING = 75
 PI_CURRENCY = "USD"
 DOCUMENTS = {
-    "PI": ["Số HĐ", "Ngày HĐ PI", "Nhà cung cấp", "Cảng đến", "Tên hàng", "Giá tổng", "Đơn giá"],
+    "PI": ["Số HĐ", "Ngày HĐ PI", "Nhà cung cấp", "Tên hàng", "Item code", "Giá tổng", "Đơn giá"],
     "INV": ["INV", "Ngày INV"],
     "PKL": ["Số hộp", "Trọng lượng (NET)"],
     "Bill": ["BL NO.", "Số Container", "Hãng tàu", "Cảng đi", "Cảng đến", "ETD"],
@@ -112,6 +112,7 @@ DOCUMENT_INSTRUCTIONS = {
 - XUẤT XỨ là xuất xứ của hàng hóa; với NCC ngoài danh sách chuẩn, được suy luận từ Product origin, Country of origin hoặc quốc gia đi cùng nhà sản xuất/NCC nguồn trong mô tả hàng.
 - Cảng đến nếu nhận diện được Cat Lai/Cát Lai/HCMC/Ho Chi Minh City/Saigon thì trả mã HCM; nếu nhận diện được Hai Phong/Hải Phòng thì trả mã HP. Không trả tên cảng đầy đủ.
 - Tên hàng là tên sản phẩm.
+- Item code là mã hàng/item code nếu PI có ghi rõ; nếu không có thì trả chuỗi rỗng. Không tự tạo hoặc suy đoán Item code.
 - Giá tổng ưu tiên TOTAL hoặc TOTAL AMOUNT nếu có.
 - Nếu không ghi tổng trực tiếp, được phép cộng các đợt thanh toán khi tổng tỷ lệ bằng 100%.
 - Cũng được phép tính Quantity × Unit Price sau khi đổi đúng đơn vị, ví dụ KGS sang MT.
@@ -349,6 +350,40 @@ def extract_json(text, fields):
     return result
 
 
+def extract_json(text, fields, as_array=False):
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.I).strip()
+    start = text.find("{")
+    if start < 0:
+        raise ValueError("AI khong tra ve JSON hop le.")
+    try:
+        data, _ = json.JSONDecoder().raw_decode(text[start:])
+    except json.JSONDecodeError as error:
+        raise ValueError(f"AI tra ve JSON loi: {error}") from error
+
+    def clean_item(item):
+        item = item if isinstance(item, dict) else {}
+        cleaned = {field: str(item.get(field, "") or "").strip() for field in fields}
+        for field in cleaned:
+            if "Ngay" in field or field == "ETD":
+                cleaned[field] = normalize_date(cleaned[field])
+        return cleaned
+
+    if as_array:
+        items = data.get("items", data.get("data", [])) if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            items = [items]
+        result = [clean_item(item) for item in items if isinstance(item, dict)]
+        return result or [clean_item({})]
+
+    result = clean_item(data)
+    try:
+        result["_confidence"] = float(data.get("_confidence", 0) or 0)
+    except (TypeError, ValueError):
+        result["_confidence"] = 0
+    result["_reason"] = str(data.get("_reason", "") or "").strip()
+    return result
+
+
 def call_openrouter(prompt):
     """Gọi model OCR duy nhất và yêu cầu phản hồi JSON."""
     response = requests.post(
@@ -376,6 +411,16 @@ def call_openrouter(prompt):
 def build_extraction_prompt(ocr_text, doc_type):
     """Tạo prompt tiếng Việt; chỉ PKL được phép tính tổng từ dòng chi tiết."""
     fields = DOCUMENTS[doc_type]
+    output_shape = ""
+    if doc_type in {"PI", "Bill"}:
+        output_shape = """
+QUY TẮC TRẢ VỀ DẠNG MẢNG:
+- Luôn trả về JSON có key items là một mảng.
+- Với PI, mỗi phần tử trong items là một mặt hàng riêng.
+- Với Bill/BL, mỗi phần tử trong items là một container hoặc một dòng dữ liệu BL riêng.
+- Nếu chỉ có một mặt hàng/container thì items vẫn là mảng có một phần tử.
+- Nếu không có Item code thì trả chuỗi rỗng; không tự tạo hoặc suy đoán mã.
+"""
     supplier_rule = ""
     carrier_rule = ""
     if doc_type == "Bill":
@@ -433,6 +478,8 @@ NGUYÊN TẮC CHUNG:
 
 {NUMBER_FORMAT_INSTRUCTIONS}
 
+{output_shape}
+
 QUY TẮC RIÊNG CHO TIỀN PI:
 - Đơn vị tiền thanh toán và các trường Giá tổng/Đơn giá luôn là USD.
 - Không trả về EUR, VND hoặc loại tiền khác; không cần suy đoán hay quy đổi sang loại tiền khác.
@@ -485,6 +532,51 @@ def analyze_with_openrouter(ocr_text, doc_type):
         "_reason": result.get("_reason", ""),
     }
     return result
+
+def analyze_with_openrouter(ocr_text, doc_type):
+    if not OPENROUTER_KEY:
+        raise ValueError("Thieu open_router_key trong file .env")
+    if doc_type not in DOCUMENTS:
+        raise ValueError(f"Loai chung tu khong duoc ho tro: {doc_type}")
+
+    fields = DOCUMENTS[doc_type]
+    model_result = extract_json(
+        call_openrouter(build_extraction_prompt(ocr_text, doc_type)),
+        fields,
+        as_array=doc_type in {"PI", "Bill"},
+    )
+
+    if doc_type in {"PI", "Bill"}:
+        results = []
+        for item in model_result:
+            normalize_result_formats(item, doc_type, ocr_text)
+            results.append(item)
+        if doc_type == "PI" and results:
+            reconcile_pi_total(results[0], ocr_text)
+        return results
+
+    result = dict(model_result)
+    normalize_result_formats(result, doc_type, ocr_text)
+    if doc_type == "INV":
+        reconcile_invoice_number(result, ocr_text)
+    if "Cảng đến" in result:
+        original_port = result.get("Cảng đến", "")
+        normalized_port = normalize_destination_port(original_port)
+        if original_port and normalized_port != original_port:
+            result["Cảng đến"] = normalized_port
+        elif original_port and not normalized_port:
+            result["Cảng đến"] = ""
+            result["_confidence"] = min(float(result.get("_confidence", 0) or 0), 60)
+            result["_port_validation_warning"] = (
+                f"Khong nhan dien duoc Cang den chuan HCM/HP: {original_port}."
+            )
+    result["_model_result"] = {
+        **{field: result.get(field, "") for field in fields},
+        "_confidence": result.get("_confidence", 0),
+        "_reason": result.get("_reason", ""),
+    }
+    return result
+
 
 def normalize_for_match(value):
     """Chuẩn hóa chuỗi để đối chiếu tên nhà cung cấp."""
@@ -953,9 +1045,11 @@ def analyze_payload(payload):
         ocr_text, ocr_confidence, used_ocr = ocr_file(temporary_path)
         data = analyze_with_openrouter(ocr_text, document_type)
         fields = DOCUMENTS[document_type]
-        final_data = {field: data.get(field, "") for field in fields}
+        final_data = data if document_type in {"PI", "Bill"} else {
+            field: data.get(field, "") for field in fields
+        }
         # Giữ hợp đồng response cũ của BE cho Frontend hiện tại.
-        if document_type == "PKL":
+        if document_type == "PKL" and not isinstance(data, list):
             final_data = {
                 "Số hộp": data.get("Số hộp", ""),
                 "Trọng lượng": data.get("Trọng lượng (NET)", ""),
@@ -965,12 +1059,17 @@ def analyze_payload(payload):
             "documentType": "BL" if document_type == "Bill" else document_type,
             "fileName": file_name,
             "data": final_data,
-            "_confidence": data.get("_confidence", 0),
-            "_reason": data.get("_reason", ""),
+            "_confidence": data[0].get("_confidence", 0) if isinstance(data, list) and data else data.get("_confidence", 0),
+            "_reason": data[0].get("_reason", "") if isinstance(data, list) and data else data.get("_reason", ""),
             "ocrConfidence": ocr_confidence,
             "usedLocalOcr": used_ocr,
-            "warnings": {key: value for key, value in data.items() if key.endswith("_warning")},
-            "modelResult": data.get("_model_result", {}),
+            "warnings": {
+                key: value
+                for item in (data if isinstance(data, list) else [data])
+                for key, value in item.items()
+                if key.endswith("_warning")
+            },
+            "modelResult": data if isinstance(data, list) else data.get("_model_result", {}),
             "models": {"ocr": OPENROUTER_MODEL_OCR},
         }
     finally:

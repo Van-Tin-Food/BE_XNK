@@ -7,7 +7,9 @@ function createBusinessService(model) {
   const columnList = model.columns.map(quote).join(', ');
 
   function valuesFromBody(body, includeId = true) {
+    const aliases = model.fieldAliases || {};
     const entries = Object.entries(body || {})
+      .map(([key, value]) => [aliases[key] || key, value])
       .filter(([key, value]) => model.columns.includes(key) && value !== undefined);
     if (!includeId) {
       return entries.filter(([key]) => key !== model.idColumn);
@@ -32,6 +34,13 @@ function createBusinessService(model) {
 
   async function create(body) {
     const entries = valuesFromBody(body);
+    const input = Object.fromEntries(entries);
+    const missing = (model.required || []).filter((key) => (
+      input[key] === undefined || input[key] === null || String(input[key]).trim() === ''
+    ));
+    if (missing.length) {
+      throw Object.assign(new Error(`Thieu truong bat buoc: ${missing.join(', ')}`), { statusCode: 400 });
+    }
     if (!entries.length) throw Object.assign(new Error('Không có dữ liệu để tạo'), { statusCode: 400 });
 
     const fields = entries.map(([key]) => quote(key));
