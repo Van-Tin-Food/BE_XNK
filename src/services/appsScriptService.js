@@ -91,14 +91,7 @@ async function callAppsScript(action, params = {}, method = 'GET', body) {
 
 const appsScriptService = {
   call: callAppsScript,
-  getSheetTotal: () => callAppsScript('getSheetTotal'),
-  getSheetSummary: () => callAppsScript('getSheetSummary'),
-  getSheetNoti: () => callAppsScript('getSheetNoti'),
-  markAllNotificationsRead: (method = 'POST') => callAppsScript('markAllNotificationsRead', {}, method),
-  markNotificationRead: (method = 'POST') => callAppsScript('markNotificationRead', {}, method),
-  getFolderById: (folderId) => callAppsScript('getFolderById', { folderId, id: folderId }),
   getArchivedDocuments: (orderCode) => callAppsScript('getArchivedDocuments', { orderCode }),
-  checkDocumentsAndSaveStatus: (method) => callAppsScript('checkDocumentsAndSaveStatus', {}, method),
   moveCompletedOrder: (orderCode, method) => callAppsScript('moveCompletedOrder', { orderCode }, method),
 };
 

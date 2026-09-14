@@ -1,28 +1,14 @@
 const express = require('express');
-const appsScriptController = require('../controllers/appsScriptController');
+const controller = require('../controllers/appsScriptController');
+
 const router = express.Router();
 
-router.get('/getSheetTotal', appsScriptController.getSheetTotal);
-router.get('/getSheetSummary', appsScriptController.getSheetSummary);
-router.get('/getSheetNoti', appsScriptController.getSheetNoti);
-router.get('/markAllNotificationsRead', appsScriptController.markAllNotificationsRead);
-router.post('/markAllNotificationsRead', appsScriptController.markAllNotificationsRead);
-router.get('/markNotificationRead', appsScriptController.markNotificationRead);
-router.post('/markNotificationRead', appsScriptController.markNotificationRead);
-router.get('/getSheetReturnItem', appsScriptController.getSheetReturnItem);
-router.get('/getFolderById', appsScriptController.getFolderById);
-router.get('/getArchivedDocuments', appsScriptController.getArchivedDocuments);
-router.get('/checkDocumentsAndSaveStatus', appsScriptController.checkDocumentsAndSaveStatus);
-router.post('/checkDocumentsAndSaveStatus', appsScriptController.checkDocumentsAndSaveStatus);
-router.get('/moveCompletedOrder', appsScriptController.moveCompletedOrder);
-router.post('/moveCompletedOrder', appsScriptController.moveCompletedOrder);
-router.post('/uploadDocument', appsScriptController.uploadDocument);
-router.post('/editSummary', appsScriptController.editSummary);
-router.post('/editReturnItem', appsScriptController.editReturnItem);
-router.get('/updateAll', appsScriptController.updateAll);
-router.get('/getPIFiles', appsScriptController.getPIFiles);
-router.get('/getSheetSell', appsScriptController.getSheetSell);
-router.get('/checkDriveAndUpdate', appsScriptController.checkDriveAndUpdate);
-router.get('/runCheckDriveAndUpdateJob', appsScriptController.runCheckDriveAndUpdateJob);
-router.post('/sendMissingDocumentEmail', appsScriptController.sendMissingDocumentEmail);
+// Apps Script chi thao tac file tren Google Drive.
+router.post('/uploadDocument', controller.uploadDocument);
+router.get('/getArchivedDocuments', controller.getArchivedDocuments);
+router.post('/moveCompletedOrder', controller.moveCompletedOrder);
+
+// Email khong phai Apps Script nhung van giu endpoint hien tai cho Frontend.
+router.post('/sendMissingDocumentEmail', controller.sendMissingDocumentEmail);
+
 module.exports = router;
