@@ -26,13 +26,22 @@ async function moveCompletedOrder(req, res) {
 }
 
 async function uploadDocument(req, res) {
-  const { orderCode, documentCode, fileName, fileData, mimeType } = req.body || {};
+  const body = req.body || {};
+  const orderCode = body.orderCode || body.order_code || body.ma_hop_dong;
+  const documentCode = body.documentCode || body.document_code;
+  const fileName = body.fileName || body.file_name;
+  const fileData = body.fileData || body.file_data;
+  const { mimeType } = body;
   if (!orderCode || !documentCode || !fileName || !fileData) {
     return res.status(400).json({ success: false, message: 'Thieu thong tin upload' });
   }
 
   try {
-    const result = await appsScriptService.call('uploadDocument', {}, 'POST', {
+    const result = await appsScriptService.call('uploadDocument', {
+      orderCode,
+      documentCode,
+      fileName,
+    }, 'POST', {
       action: 'uploadDocument', orderCode, documentCode, fileName, fileData,
       ...(mimeType ? { mimeType } : {}),
     });
@@ -40,8 +49,26 @@ async function uploadDocument(req, res) {
 
     const fileUrl = result.fileUrl || result.file_url || result.data?.fileUrl || result.data?.file_url;
     const progress = await saveUploadedDocument(orderCode, documentCode, fileUrl);
-    return res.json({ ...result, documentProgress: progress });
-  } catch (error) { return sendServiceError(res, error, 'Khong the upload chung tu'); }
+    return res.json({
+      ...result,
+      database: {
+        saved: true,
+        table: 'chung_tu_drive',
+        orderCode: String(orderCode).trim().toUpperCase(),
+        documentCode,
+        fileUrl,
+      },
+      documentProgress: progress,
+    });
+  } catch (error) {
+    console.error('[uploadDocument] failed:', {
+      code: error.code,
+      name: error.name,
+      message: error.message,
+      stage: error.stage,
+    });
+    return sendServiceError(res, error, 'Khong the upload chung tu');
+  }
 }
 
 async function sendMissingDocumentEmail(req, res) {

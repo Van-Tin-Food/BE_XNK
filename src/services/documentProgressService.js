@@ -8,6 +8,13 @@ function hasDocument(value) {
   return value !== null && value !== undefined && String(value).trim() !== '';
 }
 
+function resolveDocumentCode(value) {
+  const input = String(value || '').trim().toUpperCase();
+  const withoutPrefix = input.replace(/^\d+\s*[.)_-]?\s*/, '');
+  if (withoutPrefix === 'BILL') return 'BL';
+  return DOCUMENT_COLUMN_BY_CODE[withoutPrefix] ? withoutPrefix : '';
+}
+
 function getDocumentStatus(row) {
   return Object.fromEntries(
     Object.entries(DOCUMENT_COLUMN_BY_CODE).map(([documentCode, column]) => [
@@ -55,7 +62,7 @@ function calculateProgress(documentStatus) {
 
 async function saveUploadedDocument(orderCode, documentCode, fileUrl) {
   const normalizedOrderCode = String(orderCode || '').trim();
-  const normalizedDocumentCode = String(documentCode || '').trim().toUpperCase();
+  const normalizedDocumentCode = resolveDocumentCode(documentCode);
   const column = DOCUMENT_COLUMN_BY_CODE[normalizedDocumentCode];
 
   if (!normalizedOrderCode || !column || !hasDocument(fileUrl)) {
@@ -178,6 +185,7 @@ async function checkDocumentProgress(orderCode) {
 module.exports = {
   checkDocumentProgress,
   saveUploadedDocument,
+  resolveDocumentCode,
   calculateProgress,
   getDocumentStatus,
 };

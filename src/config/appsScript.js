@@ -1,4 +1,5 @@
-const APPS_SCRIPT_TIMEOUT = Number(process.env.APPS_SCRIPT_TIMEOUT || 30000);
+// Upload PDF lên Drive có thể mất lâu hơn các request đọc dữ liệu.
+const APPS_SCRIPT_TIMEOUT = Number(process.env.APPS_SCRIPT_TIMEOUT || 120000);
 
 function getAppsScriptUrl() {
   const url = String(process.env.APPSCRIPT_URL || '').trim();
