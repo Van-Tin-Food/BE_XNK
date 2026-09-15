@@ -25,8 +25,10 @@ from PIL import Image
 # Image.MAX_IMAGE_PIXELS = 300_000_000
 
 PDF_OCR_DPI = 200
+# Cho phép mở ảnh đầu vào lớn để có thể thu nhỏ trước khi OCR.
+# Ảnh vẫn bị giới hạn kích thước OCR thực tế bởi MAX_OCR_PIXELS.
 MAX_OCR_PIXELS = 8_000_000
-Image.MAX_IMAGE_PIXELS = 30_000_000
+Image.MAX_IMAGE_PIXELS = 100_000_000
 
 load_dotenv()
 OPENROUTER_KEY = os.getenv("open_router_key", "").strip()
