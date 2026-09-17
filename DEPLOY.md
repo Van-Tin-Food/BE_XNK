@@ -110,10 +110,7 @@ firebase-notification.json
 ```dockerfile
 FROM node:22-bookworm-slim
 
-# Không tải browser của Playwright vào image này (~130MB).
-# Route CK Line tracking hiện chưa chạy được trong container - xem DEPLOY.md muc 11.1
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-    NODE_ENV=production
+ENV NODE_ENV=production
 
 WORKDIR /app
 
@@ -197,12 +194,12 @@ services:
 
       # Gọi service ocr qua DNS nội bộ của Compose
       PYTHON_OCR_URL: http://ocr:8001
+      CARRIER_FETCH_TIMEOUT: ${CARRIER_FETCH_TIMEOUT:-30000}
     depends_on:
       - ocr
     healthcheck:
-      # Chỉ kiểm tra tiến trình còn phản hồi HTTP, KHÔNG kiểm tra được DB.
-      # Mọi status code đều tính là pass (route /__health chưa tồn tại -> 404).
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/__health').then(()=>process.exit(0)).catch(()=>process.exit(1))"]
+      # /health kiểm tra cả kết nối database, trả 503 khi DB hỏng.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -258,6 +255,7 @@ services:
 | `APPSCRIPT_URL` | **Có** | — | URL Google Apps Script |
 | `APPS_SCRIPT_TIMEOUT` | Không | `120000` | ms |
 | `PYTHON_OCR_URL` | **Có** | `http://127.0.0.1:8001` | Phải đổi thành `http://ocr:8001` |
+| `CARRIER_FETCH_TIMEOUT` | Không | `30000` | Timeout (ms) khi gọi endpoint hãng tàu |
 
 **Service `ocr`:**
 
@@ -311,6 +309,9 @@ appscript_key=https://script.google.com/macros/s/<deployment-id>/exec
 PYTHON_OCR_URL=http://ocr:8001
 PYTHON_OCR_HOST=0.0.0.0
 PYTHON_OCR_PORT=8001
+
+# ---------- Tra cứu hãng tàu ----------
+CARRIER_FETCH_TIMEOUT=30000
 
 # ---------- JWT ----------
 JWT_SECRET=<chuỗi-sinh-từ-openssl>
@@ -524,10 +525,11 @@ docker image prune -f
 
 **Cách B (stack từ Git):** Portainer → **Stacks** → `be-xnk` → **Pull and redeploy**.
 
-Quá trình này có downtime vài giây. Do code chưa xử lý `SIGTERM`
-([mục 11.3](#113-chưa-xử-lý-graceful-shutdown)), các request đang chạy dở sẽ bị
-cắt ngang — nên chọn thời điểm ít người dùng, đặc biệt nếu đang có job OCR
-(một request OCR có thể kéo dài tới 180 giây).
+Quá trình này có downtime vài giây. Service `api` xử lý `SIGTERM` nên request
+đang chạy dở được hoàn tất trước khi thoát ([mục 11.3](#113-graceful-shutdown)).
+
+Service `ocr` thì **không** — một request OCR có thể kéo dài tới 180 giây và sẽ
+bị cắt ngang. Nên chọn thời điểm không có ai đang chạy OCR.
 
 ---
 
@@ -655,58 +657,73 @@ request `OPTIONS` hoặc tự thêm header `Access-Control-Allow-Origin` trùng 
 Những điểm sau **không** cản trở việc deploy, nhưng cần biết trước để không mất
 thời gian debug nhầm chỗ.
 
-### 11.1. Route CK Line tracking không chạy được trong container
+### 11.1. Tra cứu hãng tàu: không còn phụ thuộc trình duyệt
 
-`POST /api/tracking/ckline` sẽ **luôn thất bại** khi chạy trong Docker. Hai lý do:
+Trước đây `POST /api/tracking/ckline` mở Chromium qua Playwright với
+`headless: false`. Cách đó không chạy được trong container (không có display
+server) và rò rỉ một tiến trình Chromium mỗi lượt gọi thành công.
 
-1. `src/services/cklineTrackingService.js:22` dùng `chromium.launch({ headless: false })`,
-   tức mở cửa sổ trình duyệt thật. Container không có display server.
-2. Ở nhánh thành công, `browser.close()` không được gọi — lệnh này chỉ có trong
-   khối `catch`. Mỗi request thành công sẽ để lại một tiến trình Chromium sống
-   vĩnh viễn; nếu ép chạy được, nó sẽ ăn dần RAM cho tới khi server treo.
+Nay toàn bộ phần tracking chuyển sang gọi HTTP trực tiếp từ server, theo đúng cơ
+chế của `update_funtions/Service_TrackingTest.js`. Playwright đã được gỡ khỏi
+`package.json`, trong `src/` không còn tham chiếu nào tới `chromium`.
 
-Thiết kế gốc của route này là mở trình duyệt trên **máy cá nhân** cho người dùng
-xem, không phải chạy trên server. Muốn dùng trên server thì phải viết lại:
-chuyển sang `headless: true`, bóc dữ liệu rồi trả JSON, và đóng browser trong
-khối `finally`.
+Registry hãng tàu nằm ở `src/config/trackingCarriers.js`, gồm 9 hãng: MSC, COSCO,
+Yang Ming, Hapag-Lloyd, Maersk, PIL, ONE, CMA và CK Line. Thêm hãng mới chỉ cần
+thêm một entry với `label` + `buildRequest(trackingNumber)`.
 
-Trong lúc chưa sửa, nên chặn route này ở tầng reverse proxy.
+| Route | Công dụng |
+|-------|-----------|
+| `GET /api/tracking/carriers` | Danh sách hãng được hỗ trợ |
+| `POST /api/tracking/carriers/link` | Trả link tra cứu để frontend mở trong trình duyệt người dùng |
+| `POST /api/tracking/carriers/lookup` | Gọi endpoint của hãng từ server, trả nguyên phản hồi |
+| `POST /api/tracking/ckline` | Giữ nguyên để tương thích ngược, nay trả link thay vì mở browser |
+| `POST /api/tracking/evergreen/launch` | Không đổi |
 
-Route `POST /api/tracking/evergreen/launch` **không** bị ảnh hưởng — nó chỉ tạo
-sẵn thông tin request chứ không mở browser.
+**Hai đặc điểm cần biết khi dùng `/carriers/lookup`:**
 
-### 11.2. Chưa có health endpoint thật
+Nhiều hãng (MSC, Hapag-Lloyd, Maersk, CMA) có bot protection chặn request tự
+động, và kết quả chặn phụ thuộc IP gọi đi — cùng một đoạn code có thể chạy được
+từ máy này nhưng bị 403 từ máy khác. Ngoài ra Yang Ming, PIL, ONE là SPA nên HTML
+trả về chỉ là khung trang, dữ liệu thật do JS tải sau.
 
-Healthcheck trong `docker-compose.yml` chỉ xác nhận tiến trình Node còn phản hồi
-HTTP. Nó **không** phát hiện được trường hợp mất kết nối database hay service OCR
-chết. Nên bổ sung một route `/health` kiểm tra thật:
+Vì vậy `lookup` trả về nguyên trạng những gì nhận được (`status`, `isJson`,
+`json`, `raw`) thay vì cố vượt rào hay bịa dữ liệu. Response luôn kèm trường
+`url` để frontend mở trang tra cứu trong trình duyệt người dùng khi server bị
+chặn — đó là đường đi dùng được với mọi hãng.
 
-```js
-app.get('/health', async (req, res) => {
-  try {
-    await pool.query('select 1');
-    res.json({ status: 'ok' });
-  } catch (error) {
-    res.status(503).json({ status: 'degraded', error: error.message });
-  }
-});
+**Riêng CK Line** dùng framework WebSquare: ô nhập và endpoint tra cứu
+(`sup.WESSUP411.WESSUP411R01`) đều do JS dựng sau khi trang load, không có trong
+HTML gốc, nên không dựng được request hợp lệ từ server. Hãng này chỉ trả deep
+link kèm `autoFill: false` — người dùng mở trang rồi tự nhập B/L.
+
+### 11.2. Health endpoint
+
+`GET /health` kiểm tra kết nối database và service OCR:
+
+```json
+{
+  "status": "ok",
+  "checks": { "database": "ok", "ocr": "ok" },
+  "uptime": 7
+}
 ```
 
-Sau khi thêm, sửa `test` trong healthcheck để kiểm tra đúng status code 200.
+Quy ước status code: **chỉ database quyết định** kết quả. DB hỏng → `503`, Docker
+sẽ đánh dấu container unhealthy. OCR chết chỉ hiện trong `checks.ocr` nhưng vẫn
+trả `200`, vì phần lớn API không phụ thuộc OCR — để OCR làm cả API bị restart thì
+thiệt hơn lợi.
 
-### 11.3. Chưa xử lý graceful shutdown
+Kiểm tra OCR coi mọi phản hồi HTTP là còn sống, kể cả `501`, vì `ocr_server.py`
+chỉ định nghĩa `do_POST` nên trả `501` với mọi request GET.
 
-Code không bắt `SIGTERM`. Khi restart hoặc redeploy, request đang xử lý bị cắt
-ngang. `init: true` trong compose đảm bảo tín hiệu được gửi tới đúng tiến trình,
-nhưng ứng dụng vẫn cần tự đóng kết nối:
+### 11.3. Graceful shutdown
 
-```js
-const server = app.listen(port, () => { /* ... */ });
+`src/app.js` bắt `SIGTERM`/`SIGINT`, đóng server rồi đóng connection pool trước
+khi thoát, kèm chốt chặn 15 giây phòng trường hợp còn kết nối treo. Nhờ đó
+`docker compose restart` không cắt ngang request đang xử lý.
 
-process.on('SIGTERM', () => {
-  server.close(() => pool.end().finally(() => process.exit(0)));
-});
-```
+Cần giữ `init: true` trong compose: nếu PID 1 là shell thì tín hiệu không tới
+được tiến trình Node và mọi xử lý trên đều vô nghĩa.
 
 ### 11.4. Service OCR dùng HTTP server của thư viện chuẩn
 
