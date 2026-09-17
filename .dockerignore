@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+.github
+
+# Virtualenv Windows bị commit nhầm vào repo - vô dụng trong container Linux
+.venv
+
+# Dependencies: để npm ci / pip install dựng lại trong image
+node_modules
+
+# Secrets - tuyệt đối không đưa vào image
+.env
+.env.*
+!.env.example
+
+# Build outputs
+dist
+build
+coverage
+*.log
+
+# File Docker không cần nằm trong build context
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+
+# Tài liệu
+DEPLOY.md
+README.md
+*.md
+
+# Apps Script của dự án khác, không thuộc backend này
+update_funtions
+
+# Credentials
+firebase-notification.json
+nofication-xnk-firebase-adminsdk-*
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db

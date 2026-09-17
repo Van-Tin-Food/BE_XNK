@@ -18,7 +18,7 @@ PostgreSQL **không** nằm trong stack này — xem [mục 6](#6-kết-nối-po
 
 1. [Yêu cầu](#1-yêu-cầu)
 2. [Chuẩn bị repo](#2-chuẩn-bị-repo)
-3. [Tạo các file Docker](#3-tạo-các-file-docker)
+3. [Các file Docker](#3-các-file-docker)
 4. [Biến môi trường](#4-biến-môi-trường)
 5. [Deploy bằng Portainer](#5-deploy-bằng-portainer)
 6. [Kết nối PostgreSQL](#6-kết-nối-postgresql)
@@ -63,7 +63,9 @@ git commit -m "chore: remove .venv from version control"
 
 `.gitignore` đã có sẵn dòng `.venv` nên sau bước này Git sẽ tự bỏ qua nó.
 
-### 2.2. Các file cần tạo mới
+### 2.2. Các file Docker
+
+Bốn file sau **đã có sẵn trong repo**, không cần tạo thủ công:
 
 | File | Mục đích |
 |------|----------|
@@ -72,164 +74,70 @@ git commit -m "chore: remove .venv from version control"
 | `Dockerfile.ocr` | Image cho service Python OCR |
 | `docker-compose.yml` | Định nghĩa stack |
 
-Nội dung đầy đủ ở [mục 3](#3-tạo-các-file-docker).
+Nội dung và giải thích từng file ở [mục 3](#3-các-file-docker).
+
+Việc duy nhất phải làm thủ công là tạo file `.env` — xem [mục 4.3](#43-file-env-cho-stack).
 
 > **Lưu ý:** `Dockerfile` cũ ở thư mục gốc (chạy cả Node lẫn Python trong một
 > container) **không nên dùng nữa** — xem [mục 11.5](#115-không-dùng-dockerfile-gốc).
 
 ---
 
-## 3. Tạo các file Docker
+## 3. Các file Docker
+
+Bốn file dưới đây đã có sẵn trong repo. Phần này giải thích những quyết định
+không hiển nhiên trong đó, để khi cần sửa thì biết đang đụng vào cái gì.
 
 ### 3.1. `.dockerignore`
 
-Bắt buộc phải có. Nếu thiếu, lệnh `COPY . .` sẽ nhét cả `.git` (35 MB), `.venv`
-(94 MB) và — nguy hiểm nhất — file `.env` chứa mật khẩu vào trong image.
+Quan trọng nhất trong bốn file. Nếu thiếu, `COPY` sẽ nhét cả `.git` (35 MB),
+`.venv` (94 MB) và — nguy hiểm nhất — file `.env` chứa mật khẩu vào image.
 
-```gitignore
-.git
-.gitignore
-.venv
-node_modules
-.env
-.env.*
-!.env.example
-*.log
-dist
-build
-coverage
-Dockerfile*
-docker-compose*.yml
-DEPLOY.md
-README.md
-firebase-notification.json
-```
+Ngoài rác thông thường, file này còn loại trừ `update_funtions/` (mã Apps Script
+của dự án Dashboard, không thuộc backend này) và các file credential Firebase.
 
 ### 3.2. `Dockerfile.api`
 
-```dockerfile
-FROM node:22-bookworm-slim
+Base `node:22-bookworm-slim`. Ba điểm đáng chú ý:
 
-ENV NODE_ENV=production
+- **`npm ci` chứ không phải `npm install`** — cài đúng theo `package-lock.json`,
+  mọi lần build ra cùng một bộ thư viện.
+- **Copy `package*.json` trước, `src/` sau** — đổi code mà không đổi dependency
+  thì Docker dùng lại layer đã cache, build nhanh hơn nhiều.
+- **`USER node`** — image `node` có sẵn user uid 1000, không chạy bằng root.
 
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-
-COPY src ./src
-
-# Chạy bằng user không phải root
-USER node
-
-EXPOSE 5000
-CMD ["node", "src/app.js"]
-```
-
-**Vì sao `npm ci` chứ không phải `npm install`:** `npm ci` cài đúng theo
-`package-lock.json`, đảm bảo mọi lần build đều ra cùng một bộ thư viện.
+Không còn cài Chromium hay thư viện đồ hoạ: phần tracking đã bỏ Playwright
+([mục 11.1](#111-tra-cứu-hãng-tàu-không-còn-phụ-thuộc-trình-duyệt)).
 
 ### 3.3. `Dockerfile.ocr`
 
-```dockerfile
-FROM python:3.12-slim-bookworm
+Base `python:3.12-slim-bookworm` + `tesseract-ocr` + `tesseract-ocr-vie`.
 
-# Tesseract + gói ngôn ngữ tiếng Việt (code tự dò "eng+vie" nếu có)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        tesseract-ocr \
-        tesseract-ocr-vie && \
-    rm -rf /var/lib/apt/lists/*
+Gói `vie` là bắt buộc với chứng từ tiếng Việt: `ocr_server.py` tự dùng `eng+vie`
+nếu phát hiện có gói này, không có thì lùi về `eng` và mất dấu.
 
-WORKDIR /app
+`PYTHON_OCR_HOST` được đặt `0.0.0.0` ngay trong image. Mặc định trong code là
+`127.0.0.1`, để nguyên thì container `api` không gọi sang được.
 
-COPY python/requirements.txt ./python/requirements.txt
-RUN pip install --no-cache-dir -r python/requirements.txt
-
-COPY python ./python
-
-RUN useradd --create-home --uid 1001 ocr
-USER ocr
-
-# PYTHON_OCR_HOST bắt buộc phải là 0.0.0.0. Mặc định trong code là 127.0.0.1,
-# khi đó container khác sẽ không gọi vào được.
-ENV PYTHON_OCR_HOST=0.0.0.0 \
-    PYTHON_OCR_PORT=8001 \
-    PYTHONUNBUFFERED=1
-
-EXPOSE 8001
-CMD ["python", "python/ocr_server.py"]
-```
+Healthcheck kiểm tra ở mức TCP thay vì HTTP, vì `ocr_server.py` chỉ định nghĩa
+`do_POST` nên mọi GET đều trả `501` — dùng HTTP client sẽ phải bắt lỗi rồi coi đó
+là "sống", vòng vo và dễ sai. Đổi lại, cách này không phát hiện được trường hợp
+tiến trình treo mà cổng vẫn mở.
 
 ### 3.4. `docker-compose.yml`
 
-```yaml
-services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    image: be-xnk-api:latest
-    restart: unless-stopped
-    init: true                      # tini làm PID 1: nhận SIGTERM, dọn zombie
-    ports:
-      - "5000:5000"
-    environment:
-      NODE_ENV: production
-      PORT: 5000
-      JSON_BODY_LIMIT: 25mb
+Hai service, chỉ `api` mở cổng ra ngoài. Service `ocr` dùng `expose` thay vì
+`ports` vì **nó không có bất kỳ cơ chế xác thực nào** — để lộ ra internet là mở
+cửa cho người lạ dùng hạn mức OpenRouter của bạn.
 
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_SSL: ${DB_SSL:-false}
+- **`init: true`** — chạy tini làm PID 1 để chuyển tiếp `SIGTERM` cho Node (app
+  có xử lý graceful shutdown) và dọn tiến trình zombie. Bỏ dòng này thì phần xử
+  lý `SIGTERM` trong `src/app.js` trở nên vô nghĩa.
+- **`mem_limit: 2g`** cho `ocr` — xem [mục 10.5](#105-container-ocr-bị-kill-đột-ngột-exit-code-137) nếu gặp exit code 137.
+- **`PYTHON_OCR_URL: http://ocr:8001`** — gọi qua DNS nội bộ của Compose.
+- **`logging`** giới hạn 10 MB × 3 file mỗi service, tránh log ăn hết ổ đĩa.
 
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-
-      APPSCRIPT_URL: ${APPSCRIPT_URL}
-      APPS_SCRIPT_TIMEOUT: ${APPS_SCRIPT_TIMEOUT:-120000}
-
-      # Gọi service ocr qua DNS nội bộ của Compose
-      PYTHON_OCR_URL: http://ocr:8001
-      CARRIER_FETCH_TIMEOUT: ${CARRIER_FETCH_TIMEOUT:-30000}
-    depends_on:
-      - ocr
-    healthcheck:
-      # /health kiểm tra cả kết nối database, trả 503 khi DB hỏng.
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
-
-  ocr:
-    build:
-      context: .
-      dockerfile: Dockerfile.ocr
-    image: be-xnk-ocr:latest
-    restart: unless-stopped
-    init: true
-    # KHÔNG mở ports ra ngoài - service này không có xác thực.
-    expose:
-      - "8001"
-    environment:
-      PYTHON_OCR_HOST: 0.0.0.0
-      PYTHON_OCR_PORT: 8001
-      open_router_key: ${open_router_key}
-      OPENROUTER_MODEL_OCR: ${OPENROUTER_MODEL_OCR:-openai/gpt-4o-mini}
-      appscript_key: ${APPSCRIPT_URL}
-    # OCR tốn RAM: ảnh xử lý tới 8 triệu pixel, PDF render ở 200 DPI.
-    mem_limit: 2g
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
-```
+Cổng mở ra host đổi được bằng `API_PORT` trong `.env` mà không phải sửa compose.
 
 ---
 
@@ -241,7 +149,8 @@ services:
 
 | Biến | Bắt buộc | Mặc định | Ghi chú |
 |------|:--------:|----------|---------|
-| `PORT` | Không | `5000` | Port Express lắng nghe |
+| `PORT` | Không | `5000` | Port Express lắng nghe bên trong container |
+| `API_PORT` | Không | `5000` | Cổng mở ra host (chỉ Compose dùng) |
 | `NODE_ENV` | Không | — | Đặt `production` để ẩn chi tiết lỗi khỏi response |
 | `JSON_BODY_LIMIT` | Không | `25mb` | Giới hạn body JSON |
 | `DB_HOST` | **Có** | — | Host PostgreSQL |
@@ -274,8 +183,8 @@ services:
 
 ### 4.2. Tạo `JWT_SECRET`
 
-Giá trị `123456789` trong `.env.example` chỉ để minh hoạ, **tuyệt đối không dùng
-trên production**. Sinh chuỗi mới:
+`.env.example` để trống giá trị này. **Không dùng lại giá trị mẫu cũ `123456789`**
+— đoán được trong vài giây, ai cũng có thể tự ký token với `role` tuỳ ý. Sinh chuỗi mới:
 
 ```bash
 openssl rand -base64 48
@@ -348,7 +257,7 @@ git clone https://github.com/Van-Tin-Food/BE_XNK.git be-xnk
 cd be-xnk
 ```
 
-**Bước 2.** Tạo 4 file ở [mục 3](#3-tạo-các-file-docker) và file `.env` ở [mục 4.3](#43-file-env-cho-stack).
+**Bước 2.** Tạo file `.env` theo [mục 4.3](#43-file-env-cho-stack). Các file Docker đã có sẵn trong repo.
 
 **Bước 3.** Build và chạy. Dùng CLI ở lần đầu để thấy log lỗi rõ ràng:
 
@@ -472,12 +381,32 @@ docker compose ps
 
 Cả `api` và `ocr` phải ở trạng thái `running`.
 
+**Health check** — đây là lệnh đáng chạy đầu tiên, nó kiểm tra luôn cả database và OCR:
+
+```bash
+curl -s http://localhost:5000/health
+# {"status":"ok","checks":{"database":"ok","ocr":"ok"},"uptime":12}
+```
+
+`"database":"fail: ..."` → xem [mục 10.3](#103-container-api-không-kết-nối-được-database).
+`"ocr":"fail: ..."` → xem [mục 10.2](#102-api-báo-lỗi-gọi-ocr--econnrefused).
+
 **API phản hồi.** Kết quả 404 dạng JSON là đúng — nó chứng tỏ Express đã nhận được request:
 
 ```bash
 curl -i http://localhost:5000/api/khong-ton-tai
 # HTTP/1.1 404 Not Found
 # {"success":false,"message":"Route not found"}
+```
+
+**Tra cứu hãng tàu** (không cần database, kiểm tra nhanh được):
+
+```bash
+curl -s http://localhost:5000/api/tracking/carriers
+
+curl -s -X POST http://localhost:5000/api/tracking/carriers/link \
+  -H "Content-Type: application/json" \
+  -d '{"carrier":"MAERSK","trackingNumber":"123456789"}'
 ```
 
 **Đăng nhập thử** để kiểm tra kết nối database:
