@@ -1,13 +1,19 @@
 const appsScriptService = require('../services/appsScriptService');
 const emailService = require('../services/emailService');
-const { saveUploadedDocument } = require('../services/documentProgressService');
+const {
+  saveUploadedDocument,
+  resolveDocumentCode,
+} = require('../services/documentProgressService');
+const { randomUUID } = require('node:crypto');
 
 function sendServiceError(res, error, message) {
-  return res.status(error.code === 'EMAIL_CONFIG_MISSING' ? 500 : 502).json({
+  const status = error.statusCode || (error.code === 'EMAIL_CONFIG_MISSING' ? 500 : 502);
+  return res.status(status).json({
     success: false,
     message,
     error: error.message,
     apps_script: error.appsScriptResponse,
+    ...(error.uploadedFile ? { uploadedFile: error.uploadedFile } : {}),
   });
 }
 
@@ -27,28 +33,50 @@ async function moveCompletedOrder(req, res) {
 
 async function uploadDocument(req, res) {
   const body = req.body || {};
+  const requestId = body.requestId || randomUUID();
   const orderCode = body.orderCode || body.order_code || body.ma_hop_dong;
   const documentCode = body.documentCode || body.document_code;
   const fileName = body.fileName || body.file_name;
-  const fileData = body.fileData || body.file_data;
-  const { mimeType } = body;
+  const fileData = body.fileData || body.file_data || body.fileBase64 || body.base64;
+  const { mimeType, referenceCode, idChiTiet } = body;
   if (!orderCode || !documentCode || !fileName || !fileData) {
     return res.status(400).json({ success: false, message: 'Thieu thong tin upload' });
   }
 
+  let uploadedFile = null;
   try {
+    console.log(`[uploadDocument:${requestId}] calling Apps Script`);
     const result = await appsScriptService.call('uploadDocument', {
       orderCode,
       documentCode,
       fileName,
     }, 'POST', {
       action: 'uploadDocument', orderCode, documentCode, fileName, fileData,
-      ...(mimeType ? { mimeType } : {}),
+      mimeType: mimeType || 'application/pdf',
+      ...(referenceCode ? { referenceCode } : {}),
+      ...(idChiTiet ? { idChiTiet } : {}),
+      ...(requestId ? { requestId } : {}),
     });
-    if (!result || result.success !== true) return res.status(200).json(result);
+    if (!result || result.success !== true) {
+      const status = result?.errorCode === 'MISSING_FILE_DATA' ? 400 : 502;
+      return res.status(status).json(result || {
+        success: false,
+        message: 'Apps Script khong tra ve ket qua upload',
+      });
+    }
 
-    const fileUrl = result.fileUrl || result.file_url || result.data?.fileUrl || result.data?.file_url;
-    const progress = await saveUploadedDocument(orderCode, documentCode, fileUrl);
+    console.log('File upload thanh cong');
+
+    uploadedFile = {
+      fileId: result.fileId || result.file_id || result.data?.fileId || result.data?.file_id,
+      fileName: result.fileName || result.file_name || result.data?.fileName || result.data?.file_name || fileName,
+      fileUrl: result.fileUrl || result.file_url || result.data?.fileUrl || result.data?.file_url,
+      referenceCode,
+      idChiTiet,
+      requestId,
+    };
+    const fileUrl = uploadedFile.fileUrl;
+    const progress = await saveUploadedDocument(orderCode, documentCode, uploadedFile);
     return res.json({
       ...result,
       database: {
@@ -59,14 +87,16 @@ async function uploadDocument(req, res) {
         fileUrl,
       },
       documentProgress: progress,
+      files: progress.documents?.[resolveDocumentCode(documentCode)]?.files || [],
     });
   } catch (error) {
-    console.error('[uploadDocument] failed:', {
+    console.error(`[uploadDocument:${requestId}] failed:`, {
       code: error.code,
       name: error.name,
       message: error.message,
       stage: error.stage,
     });
+    if (uploadedFile) error.uploadedFile = uploadedFile;
     return sendServiceError(res, error, 'Khong the upload chung tu');
   }
 }
