@@ -172,27 +172,42 @@ async function findDocumentStatus(orderCode, executor = pool) {
   return result.rows[0] || null;
 }
 
-async function syncExceededNotification(orderCode, progress, refreshNotification = false) {
+async function syncDocumentNotification(orderCode, progress, refreshNotification = false) {
   const completed = progress.currentStage === null;
-  const type = completed ? 'HOAN_THANH' : 'THIEU_CHUNG_TU';
+  const exceeded = !completed && progress.isExceeded;
+
+  // Chuẩn hóa notification cũ trước đây được tạo dưới type THIEU_CHUNG_TU.
+  await pool.query(
+    `UPDATE public.thong_bao
+     SET type = 'VUOT_LO_TRINH'
+     WHERE order_code = $1 AND type = 'THIEU_CHUNG_TU'`,
+    [orderCode],
+  );
+
+  // Thiếu chứng từ đúng giai đoạn hiện tại nhưng chưa vượt lộ trình
+  // thì không tạo notification.
+  if (!completed && !exceeded) {
+    await pool.query(
+      `UPDATE public.thong_bao SET status = 1, date_time = CURRENT_TIMESTAMP
+       WHERE order_code = $1
+         AND type IN ('VUOT_LO_TRINH', 'THIEU_CHUNG_TU')
+         AND status = 0`,
+      [orderCode],
+    );
+    return null;
+  }
+
+  const type = completed ? 'HOAN_THANH' : 'VUOT_LO_TRINH';
   const missing = completed ? '' : progress.missingDocuments.join(', ');
   const name = completed
     ? '\u0110\u01a1n ho\u00e0n th\u00e0nh'
-    : `\u0110\u01a1n thi\u1ebfu ch\u1ee9ng t\u1eeb - ${progress.currentStageLabel}`;
-
-  // Chuẩn hóa dữ liệu cũ về đúng hai loại thông báo hiện tại.
-  await pool.query(
-    `UPDATE public.thong_bao
-     SET type = 'THIEU_CHUNG_TU'
-     WHERE order_code = $1 AND type = 'VUOT_LO_TRINH'`,
-    [orderCode],
-  );
+    : `\u0110\u01a1n v\u01b0\u1ee3t l\u1ed9 tr\u00ecnh - ${progress.currentStageLabel}`;
 
   // Khi trạng thái chuyển sang dạng còn lại, đóng thông báo cũ của đơn.
   await pool.query(
     `UPDATE public.thong_bao SET status = 1, date_time = CURRENT_TIMESTAMP
      WHERE order_code = $1
-       AND type IN ('THIEU_CHUNG_TU', 'HOAN_THANH')
+       AND type IN ('VUOT_LO_TRINH', 'THIEU_CHUNG_TU', 'HOAN_THANH')
        AND type <> $2 AND status = 0`,
     [orderCode, type],
   );
@@ -236,7 +251,12 @@ async function checkDocumentProgress(orderCode, options = {}) {
   if (!row) throw Object.assign(new Error('Khong tim thay trang thai chung tu'), { statusCode: 404 });
   const documents = getDocumentStatus(row);
   const progress = calculateProgress(documents);
-  const notification = await syncExceededNotification(
+  const isComplete = progress.currentStage === null;
+  await pool.query(
+    `UPDATE public.chung_tu_drive SET status = $1 WHERE order_code = $2`,
+    [isComplete ? 1 : 0, normalizedOrderCode],
+  );
+  const notification = await syncDocumentNotification(
     normalizedOrderCode,
     progress,
     options.refreshNotification === true,

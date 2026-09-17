@@ -14,4 +14,16 @@ const DOCUMENT_COLUMN_BY_CODE = {
   '15B': '15b', QDTQ: 'qdtq', MV: 'mv', TRA_CONG: 'tra_cong',
 };
 
-module.exports = { DOCUMENT_STAGES, DOCUMENT_COLUMN_BY_CODE };
+const DOCUMENT_CODES = Object.freeze(Object.keys(DOCUMENT_COLUMN_BY_CODE));
+const DOCUMENT_STAGE_BY_CODE = Object.freeze(
+  Object.fromEntries(DOCUMENT_STAGES.flatMap((stage) => (
+    stage.documents.map((documentCode) => [documentCode, stage.stage])
+  ))),
+);
+
+module.exports = {
+  DOCUMENT_STAGES,
+  DOCUMENT_COLUMN_BY_CODE,
+  DOCUMENT_CODES,
+  DOCUMENT_STAGE_BY_CODE,
+};
