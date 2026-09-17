@@ -252,7 +252,7 @@ services:
 | `DB_NAME` | **Có** | — | Tên database |
 | `DB_USER` | **Có** | — | User PostgreSQL |
 | `DB_PASSWORD` | **Có** | — | Mật khẩu |
-| `DB_SSL` | Không | `false` | Đặt `true` với DB managed (Render/Supabase/RDS). Cần sửa code trước — xem [mục 10.4](#104-lỗi-ssl-khi-kết-nối-postgresql-managed) |
+| `DB_SSL` | Không | `false` | Đặt `true` với DB managed (Render/Supabase/RDS) |
 | `JWT_SECRET` | **Có** | — | Chuỗi ngẫu nhiên, **không dùng giá trị mẫu** |
 | `JWT_EXPIRES_IN` | Không | `7d` | Hạn token |
 | `APPSCRIPT_URL` | **Có** | — | URL Google Apps Script |
@@ -605,25 +605,22 @@ docker compose exec api node -e "require('/app/src/config/database').query('sele
 
 ### 10.4. Lỗi SSL khi kết nối PostgreSQL managed
 
-Thông báo dạng `The server does not support SSL connections` hoặc
-`connection requires SSL`. Code hiện tại không cấu hình SSL. Cần sửa
-`src/config/database.js`:
+Triệu chứng: `connection requires SSL`, hoặc `read ECONNRESET` ngay khi vừa kết nối.
 
-```js
-const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  options: '-c search_path=public',
-  ssl: process.env.DB_SSL === 'true'
-    ? { rejectUnauthorized: false }
-    : false,
-});
+`src/config/database.js` đã hỗ trợ sẵn qua biến `DB_SSL`. Chỉ cần đặt:
+
+```dotenv
+DB_SSL=true
 ```
 
-rồi thêm `DB_SSL: ${DB_SSL:-false}` vào environment của service `api`.
+Khi bật, kết nối dùng `rejectUnauthorized: false` vì Render và phần lớn dịch vụ
+managed cấp chứng chỉ self-signed, không xác thực được theo chuỗi CA gốc.
+
+Kiểm tra nhanh kết nối:
+
+```bash
+node -e "require('dotenv').config();require('./src/config/database').query('select current_user,current_database()').then(r=>console.log(r.rows[0])).catch(e=>console.error(e.message))"
+```
 
 ### 10.5. Container `ocr` bị kill đột ngột (exit code 137)
 
