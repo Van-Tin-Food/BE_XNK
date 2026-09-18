@@ -15,5 +15,10 @@ coverage/
 # Logs
 *.log
 
+# Database dump / backup - chứa dữ liệu vận hành thật (bảng users kèm bcrypt hash),
+# không được đưa lên Git.
+.sql/
+*.sql
+
 nofication-xnk-firebase-adminsdk-fbsvc-8478d03e5e
 firebase-notification.json
