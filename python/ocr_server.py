@@ -1079,6 +1079,20 @@ def analyze_payload(payload):
             Path(temporary_path).unlink(missing_ok=True)
 
 class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/health":
+            return self.reply(200, {
+                "status": "ok",
+                "service": "python-ocr",
+            })
+        return self.reply(404, {"success": False, "message": "Route not found"})
+
+    def do_HEAD(self):
+        # Render/Docker health probes may use HEAD. Return headers without a body.
+        self.send_response(200 if self.path == "/health" else 404)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_POST(self):
         if self.path != "/ocr/analyze":
             return self.reply(404, {"success": False, "message": "Route not found"})

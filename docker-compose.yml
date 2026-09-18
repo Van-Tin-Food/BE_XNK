@@ -1,0 +1,70 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: be-xnk-api:latest
+    container_name: be-xnk-api
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${API_PORT:-5000}:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      JSON_BODY_LIMIT: ${JSON_BODY_LIMIT:-25mb}
+      # PostgreSQL chạy trên máy Windows, không chạy trong container.
+      DB_HOST: host.docker.internal
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSL: false
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      APPSCRIPT_URL: ${APPSCRIPT_URL}
+      APPS_SCRIPT_TIMEOUT: ${APPS_SCRIPT_TIMEOUT:-120000}
+      PYTHON_OCR_URL: http://ocr:8001
+    depends_on:
+      ocr:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile.ocr
+    image: be-xnk-ocr:latest
+    container_name: be-xnk-ocr
+    restart: unless-stopped
+    init: true
+    expose:
+      - "8001"
+    environment:
+      PYTHON_OCR_HOST: 0.0.0.0
+      PYTHON_OCR_PORT: 8001
+      open_router_key: ${open_router_key}
+      OPENROUTER_MODEL_OCR: ${OPENROUTER_MODEL_OCR:-openai/gpt-4o-mini}
+      appscript_key: ${APPSCRIPT_URL}
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8001), 4).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
