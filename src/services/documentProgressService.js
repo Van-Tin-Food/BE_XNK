@@ -7,9 +7,15 @@ function hasDocument(value) {
 
 function resolveDocumentCode(value) {
   const input = String(value || '').trim().toUpperCase();
-  const withoutPrefix = input.replace(/^\d+\s*[.)_-]?\s*/, '');
-  if (withoutPrefix === 'BILL') return 'BL';
-  return DOCUMENT_COLUMN_BY_CODE[withoutPrefix] ? withoutPrefix : '';
+  // Remove numbering from folder labels (e.g. "03. BL"), but preserve codes like "15B".
+  const withoutPrefix = input.replace(/^\d+(?:\s*[.)_-]\s*|\s+)/, '');
+  const compactInput = withoutPrefix.replace(/[^A-Z0-9]/g, '');
+
+  if (['BILL', 'BILLOFLADING'].includes(compactInput)) return 'BL';
+
+  return Object.keys(DOCUMENT_COLUMN_BY_CODE).find((code) => (
+    code.replace(/[^A-Z0-9]/g, '') === compactInput
+  )) || '';
 }
 
 function parseDocumentValue(value) {
