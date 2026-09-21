@@ -160,10 +160,10 @@ DOCUMENT_INSTRUCTIONS = {
 
 NUMBER_FORMAT_INSTRUCTIONS = """QUY TẮC CHUẨN HÓA SỐ:
 - Được phép sửa dấu phân cách số bị OCR sai dựa trên ngữ cảnh và phép kiểm tra tổng.
-- Dùng dấu chấm phân cách hàng nghìn và dấu phẩy phân cách phần thập phân.
-- Số hộp trả về dạng số nguyên có dấu hàng nghìn, ví dụ 2592 hoặc 2,592 thành 2.592.
-- NET trả về 2 chữ số thập phân, ví dụ 25920 hoặc 25,920.00 thành 25.920,00.
-- Giá tổng trả về theo dạng "số LOẠI_TIỀN", ví dụ 1.250,50 USD, 25.920,00 EUR hoặc 1.000.000 VND.
+- Dùng format số theo chuẩn quốc tế: dấu chấm (.) để phân tách hàng thập phân và không cần dấu phẩy (,) để phân tách hàng đơn vị.
+- Số hộp trả về dạng số nguyên và không cần fomat lại để sql postgres nhận dạng.
+- NET trả về 2 chữ số thập phân, ví dụ 25920 sẽ chuyển thành 25920.00 , 25920.5 sẽ chuyển thành 25920.50
+- Giá tổng trả về theo dạng "số LOẠI_TIỀN", với 2 chữ số hang thập phân, ví dụ 25920.5 USD sẽ chuyển thành 25920.50 USD
 - Lấy đúng loại tiền gắn với giá tổng trong chứng từ. Không quy đổi USD, EUR, EURO, VND hoặc VNĐ sang đồng tiền khác.
 - Nếu chứng từ chỉ có ký hiệu tiền tệ, giữ đúng ký hiệu đó khi không đủ căn cứ xác định mã tiền.
 - Nếu không thấy loại tiền, không được tự đoán; trả số tiền và ghi rõ thiếu loại tiền trong _reason."""
@@ -224,7 +224,7 @@ def normalize_date(value):
 
 
 def prepare_image(image):
-    """Reduce oversized images before sending them to Tesseract."""
+    """Reduce oversized images before sending them to Tesseract."""                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
     pixels = image.width * image.height
     if pixels > MAX_OCR_PIXELS:
         scale = (MAX_OCR_PIXELS / pixels) ** 0.5
