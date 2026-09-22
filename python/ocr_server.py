@@ -69,7 +69,11 @@ NCC_RECORDS = [
     {"id": "NCC003", "name": "TONNIES", "country": "Germany"},
     {"id": "NCC004", "name": "SEARA", "country": "Netherlands"},
     {"id": "NCC005", "name": "DLA&Associates Inc", "country": "Canada"},
+    {"id": "NCC006", "name": "Vetracom Limited", "country": "Hong Kong"},
     {"id": "NCC007", "name": "Patel", "country": "Spain"},
+    {"id": "NCC008", "name": "FRIBIN", "country": "Spain"},
+    {"id": "NCC009", "name": "RIVASAM", "country": "Spain"},
+    {"id": "NCC010", "name": "CINCO VILLAS", "country": "Spain"},
 ]
 
 CARRIER_NAMES = [
@@ -134,7 +138,7 @@ DOCUMENT_INSTRUCTIONS = {
 - Giữ nguyên mã, bao gồm số 0 đầu, dấu chấm, dấu gạch và dấu /.""",
     "PKL": """QUY TẮC CHO PKL:
 - PKL có nhiều dòng chi tiết theo từng thùng/lô nên bắt buộc đọc đúng tiêu đề và thứ tự cột.
-- Số hộp là tổng BOXES, CARTONS hoặc CAJAS.
+- Số hộp hoặc số kiện là tổng BOXES, CARTONS hoặc CAJAS lưu ý không phải Paletts.
 - Chỉ cần trả về số lượng kiện dạng số; không bắt buộc phải nhận diện hoặc trả về đơn vị kiện hàng (thùng, carton, box...).
 - Trọng lượng (NET) là tổng NET WEIGHT, tức trọng lượng tịnh.
 - Nếu có dòng TOTAL, lấy các giá trị trên dòng TOTAL rồi cộng lại toàn bộ dòng chi tiết để kiểm tra.
