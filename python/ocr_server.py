@@ -74,6 +74,7 @@ NCC_RECORDS = [
     {"id": "NCC008", "name": "FRIBIN", "country": "Spain"},
     {"id": "NCC009", "name": "RIVASAM", "country": "Spain"},
     {"id": "NCC010", "name": "CINCO VILLAS", "country": "Spain"},
+    {"id": "NCC011", "name": "FRIVALL", "country": "Spain"},
 ]
 
 CARRIER_NAMES = [
@@ -162,15 +163,44 @@ DOCUMENT_INSTRUCTIONS = {
 - Dùng tiêu đề chứng từ, đơn vị phát hành và ngữ cảnh trường để phân biệt các mã hoặc tên gần nhau.""",
 }
 
+# NUMBER_FORMAT_INSTRUCTIONS = """QUY TẮC CHUẨN HÓA SỐ:
+# - Được phép sửa dấu phân cách số bị OCR sai dựa trên ngữ cảnh và phép kiểm tra tổng.
+# - Dùng format số theo chuẩn quốc tế: dấu chấm (.) để phân tách hàng thập phân và không cần dấu phẩy (,) để phân tách hàng đơn vị.
+# - Số hộp trả về dạng số nguyên và không cần fomat lại để sql postgres nhận dạng.
+# - NET trả về 2 chữ số thập phân, ví dụ 25920 sẽ chuyển thành 25920.00 , 25920.5 sẽ chuyển thành 25920.50
+# - Giá tổng trả về theo dạng "số LOẠI_TIỀN", với 2 chữ số hang thập phân, ví dụ 25920.5 USD sẽ chuyển thành 25920.50 USD
+# - Lấy đúng loại tiền gắn với giá tổng trong chứng từ. Không quy đổi USD, EUR, EURO, VND hoặc VNĐ sang đồng tiền khác.
+# - Nếu chứng từ chỉ có ký hiệu tiền tệ, giữ đúng ký hiệu đó khi không đủ căn cứ xác định mã tiền.
+# - Nếu không thấy loại tiền, không được tự đoán; trả số tiền và ghi rõ thiếu loại tiền trong _reason."""
+
+
 NUMBER_FORMAT_INSTRUCTIONS = """QUY TẮC CHUẨN HÓA SỐ:
+
 - Được phép sửa dấu phân cách số bị OCR sai dựa trên ngữ cảnh và phép kiểm tra tổng.
-- Dùng format số theo chuẩn quốc tế: dấu chấm (.) để phân tách hàng thập phân và không cần dấu phẩy (,) để phân tách hàng đơn vị.
-- Số hộp trả về dạng số nguyên và không cần fomat lại để sql postgres nhận dạng.
-- NET trả về 2 chữ số thập phân, ví dụ 25920 sẽ chuyển thành 25920.00 , 25920.5 sẽ chuyển thành 25920.50
-- Giá tổng trả về theo dạng "số LOẠI_TIỀN", với 2 chữ số hang thập phân, ví dụ 25920.5 USD sẽ chuyển thành 25920.50 USD
-- Lấy đúng loại tiền gắn với giá tổng trong chứng từ. Không quy đổi USD, EUR, EURO, VND hoặc VNĐ sang đồng tiền khác.
+
+- Dùng format số quốc tế:
+  + Dấu phẩy (,) để phân tách hàng nghìn.
+  + Dấu chấm (.) để phân tách phần thập phân.
+
+- Số hộp trả về dạng số nguyên, không có dấu phân cách hàng nghìn.
+  Ví dụ: 8719, 9181233.
+
+- NET trả về 2 chữ số thập phân và có dấu phẩy phân tách hàng nghìn.
+  Ví dụ:
+  25920 → 25,920.00
+  25920.5 → 25,920.50
+  762719.22 → 762,719.22
+
+- Giá tổng trả về theo dạng "số LOẠI_TIỀN", có 2 chữ số thập phân và có dấu phẩy phân tách hàng nghìn.
+  Ví dụ:
+  25920.5 USD → 25,920.50 USD
+  989121.87 USD → 989,121.87 USD
+
+- Lấy đúng loại tiền gắn với giá tổng trong chứng từ.
+
 - Nếu chứng từ chỉ có ký hiệu tiền tệ, giữ đúng ký hiệu đó khi không đủ căn cứ xác định mã tiền.
-- Nếu không thấy loại tiền, không được tự đoán; trả số tiền và ghi rõ thiếu loại tiền trong _reason."""
+
+- Nếu không thấy loại tiền, không được tự đoán; trả số tiền và ghi rõ thiếu loại tiền trong _reason.""" 
 
 MONTHS_EN = {
     "january": 1, "february": 2, "march": 3, "april": 4,
@@ -643,41 +673,132 @@ def parse_decimal(value):
         return None
 
 
+# def format_number(
+#     value,
+#     decimal_places=None,
+#     integer=False,
+#     grouped_thousands=False,
+#     decimal_separator=",",
+# ):
+#     """Chuẩn hóa cách hiển thị nhưng không thay đổi giá trị số."""
+#     raw_number = re.sub(r"[^0-9,.-]", "", str(value or "").strip())
+#     grouped_integer = re.fullmatch(r"-?\d{1,3}(?:[.,]\d{3})+", raw_number)
+#     if (integer or grouped_thousands) and grouped_integer:
+#         number = Decimal(raw_number.replace(".", "").replace(",", ""))
+#     else:
+#         number = parse_decimal(value)
+#     if number is None:
+#         return str(value or "").strip()
+#     if integer and number == number.to_integral_value():
+#         return f"{int(number):,}".replace(",", ".")
+#     if decimal_places is not None:
+#         formatted = f"{number:,.{decimal_places}f}"
+#         return (
+#             formatted.replace(",", "\0")
+#             .replace(".", decimal_separator)
+#             .replace("\0", ".")
+#         )
+#     normalized = format(number, "f")
+#     if "." in normalized:
+#         normalized = normalized.rstrip("0").rstrip(".")
+#     whole, separator, fraction = normalized.partition(".")
+#     grouped_whole = f"{int(whole):,}".replace(",", ".")
+#     return (
+#         grouped_whole + decimal_separator + fraction
+#         if separator
+#         else grouped_whole
+#     )
+
 def format_number(
     value,
     decimal_places=None,
     integer=False,
     grouped_thousands=False,
-    decimal_separator=",",
+    decimal_separator=".",
 ):
-    """Chuẩn hóa cách hiển thị nhưng không thay đổi giá trị số."""
+    """Chuẩn hóa số theo format:
+    - Hàng nghìn: dấu ,
+    - Hàng thập phân: dấu .
+    - Số nguyên: không có dấu phân cách hàng nghìn.
+    """
+
     raw_number = re.sub(r"[^0-9,.-]", "", str(value or "").strip())
-    grouped_integer = re.fullmatch(r"-?\d{1,3}(?:[.,]\d{3})+", raw_number)
-    if (integer or grouped_thousands) and grouped_integer:
-        number = Decimal(raw_number.replace(".", "").replace(",", ""))
-    else:
-        number = parse_decimal(value)
-    if number is None:
+
+    if not raw_number or not re.search(r"\d", raw_number):
         return str(value or "").strip()
-    if integer and number == number.to_integral_value():
-        return f"{int(number):,}".replace(",", ".")
+
+    # ---------------------------------------------------------
+    # Xác định giá trị số thực tế
+    # ---------------------------------------------------------
+    try:
+        # Ví dụ:
+        # 27.990,000 -> 27990.000
+        # 28.941,660 -> 28941.660
+        # 762,719.22 -> 762719.22
+        # 762719.22  -> 762719.22
+
+        if "," in raw_number and "." in raw_number:
+            last_comma = raw_number.rfind(",")
+            last_dot = raw_number.rfind(".")
+
+            if last_comma > last_dot:
+                # 27.990,000
+                normalized = raw_number.replace(".", "").replace(",", ".")
+            else:
+                # 762,719.22
+                normalized = raw_number.replace(",", "")
+
+        elif "," in raw_number:
+            parts = raw_number.split(",")
+
+            # 762,719 -> 762719
+            # 2,799 -> 2799
+            if len(parts) > 1 and all(len(part) == 3 for part in parts[1:]):
+                normalized = "".join(parts)
+            else:
+                # 25920,5 -> 25920.5
+                normalized = raw_number.replace(",", ".")
+
+        elif "." in raw_number:
+            parts = raw_number.split(".")
+
+            # 27.990 -> 27990
+            # 2.799 -> 2799
+            if len(parts) > 1 and all(len(part) == 3 for part in parts[1:]):
+                normalized = "".join(parts)
+            else:
+                # 25920.5 -> 25920.5
+                normalized = raw_number
+
+        else:
+            normalized = raw_number
+
+        number = Decimal(normalized)
+
+    except (InvalidOperation, ValueError):
+        return str(value or "").strip()
+
+    # ---------------------------------------------------------
+    # Số nguyên: KHÔNG có dấu phân cách hàng nghìn
+    # ---------------------------------------------------------
+    if integer:
+        return str(int(number))
+
+    # ---------------------------------------------------------
+    # Số thập phân cố định
+    # ---------------------------------------------------------
     if decimal_places is not None:
-        formatted = f"{number:,.{decimal_places}f}"
-        return (
-            formatted.replace(",", "\0")
-            .replace(".", decimal_separator)
-            .replace("\0", ".")
-        )
-    normalized = format(number, "f")
-    if "." in normalized:
-        normalized = normalized.rstrip("0").rstrip(".")
-    whole, separator, fraction = normalized.partition(".")
-    grouped_whole = f"{int(whole):,}".replace(",", ".")
-    return (
-        grouped_whole + decimal_separator + fraction
-        if separator
-        else grouped_whole
-    )
+        return f"{number:,.{decimal_places}f}"
+
+    # ---------------------------------------------------------
+    # Số thông thường
+    # ---------------------------------------------------------
+    formatted = f"{number:,}"
+
+    if decimal_separator != ".":
+        formatted = formatted.replace(".", decimal_separator)
+
+    return formatted
 
 
 def explicit_currencies(text):
