@@ -79,7 +79,7 @@ Nội dung và giải thích từng file ở [mục 3](#3-các-file-docker).
 Việc duy nhất phải làm thủ công là tạo file `.env` — xem [mục 4.3](#43-file-env-cho-stack).
 
 > **Lưu ý:** `Dockerfile` cũ ở thư mục gốc (chạy cả Node lẫn Python trong một
-> container) **không nên dùng nữa** — xem [mục 11.5](#115-không-dùng-dockerfile-gốc).
+> container) **không nên dùng nữa** — xem [mục 11.6](#116-không-dùng-dockerfile-gốc).
 
 ---
 
@@ -465,7 +465,7 @@ docker image prune -f
 **Cách B (stack từ Git):** Portainer → **Stacks** → `be-xnk` → **Pull and redeploy**.
 
 Quá trình này có downtime vài giây. Service `api` xử lý `SIGTERM` nên request
-đang chạy dở được hoàn tất trước khi thoát ([mục 11.3](#113-graceful-shutdown)).
+đang chạy dở được hoàn tất trước khi thoát ([mục 11.4](#114-graceful-shutdown)).
 
 Service `ocr` thì **không** — một request OCR có thể kéo dài tới 180 giây và sẽ
 bị cắt ngang. Nên chọn thời điểm không có ai đang chạy OCR.
@@ -664,7 +664,38 @@ làm cả API bị restart thì thiệt hơn lợi.
 Service OCR có endpoint `/health` riêng (`do_GET` trong `ocr_server.py`), nên
 Node kiểm tra bằng HTTP status thật chứ không phải chỉ dò cổng.
 
-### 11.3. Graceful shutdown
+### 11.3. Xác thực
+
+`src/middlewares/requireAuth.js` chặn trước toàn bộ route: mọi request phải có
+header `Authorization: Bearer <token>`, token được `jwt.verify` bằng `JWT_SECRET`.
+
+Danh sách công khai (`PUBLIC_ROUTES` trong middleware):
+
+```
+POST /api/auth/login
+GET  /health
+GET  /api/health
+GET  /node/health
+GET  /python/health
+```
+
+Mọi thứ còn lại đều cần token, **kể cả `POST /api/auth/register`** — chỉ tài khoản
+đã đăng nhập mới tạo được tài khoản mới.
+
+Ba điểm trong cách cài đặt đáng lưu ý:
+
+- Dùng **allowlist tường minh** thay vì dựa vào thứ tự `app.use()`. Các route
+  health được đăng ký sau phần mount `/api` nên nếu chỉ chèn middleware theo thứ
+  tự thì chúng vẫn bị chặn, và Docker healthcheck sẽ luôn fail.
+- Thiếu `JWT_SECRET` thì trả `500`, **không** cho request đi tiếp. Nếu `next()` ở
+  nhánh đó, một lỗi cấu hình sẽ âm thầm mở toang toàn bộ API.
+- Request `OPTIONS` được bỏ qua, vì trình duyệt không gửi kèm header
+  `Authorization` khi preflight CORS.
+
+> **Khi deploy bản này**, mọi client đang gọi API phải gửi token. Client nào chưa
+> cập nhật sẽ nhận `401` ngay lập tức.
+
+### 11.4. Graceful shutdown
 
 `src/app.js` bắt `SIGTERM`/`SIGINT`, đóng server rồi đóng connection pool trước
 khi thoát, kèm chốt chặn 15 giây phòng trường hợp còn kết nối treo. Nhờ đó
@@ -673,7 +704,7 @@ khi thoát, kèm chốt chặn 15 giây phòng trường hợp còn kết nối 
 Cần giữ `init: true` trong compose: nếu PID 1 là shell thì tín hiệu không tới
 được tiến trình Node và mọi xử lý trên đều vô nghĩa.
 
-### 11.4. Service OCR dùng HTTP server của thư viện chuẩn
+### 11.5. Service OCR dùng HTTP server của thư viện chuẩn
 
 `python/ocr_server.py` chạy bằng `ThreadingHTTPServer` — không giới hạn số luồng,
 không có cơ chế chặn quá tải. Mỗi request tạo một thread mới, nên nhiều file lớn
@@ -682,7 +713,7 @@ gửi cùng lúc sẽ dẫn tới OOM ([mục 10.5](#105-container-ocr-bị-kill
 Chấp nhận được với lượng người dùng nội bộ nhỏ. Nếu tải tăng, cần chuyển sang
 WSGI/ASGI framework (FastAPI + Uvicorn) và giới hạn số worker.
 
-### 11.5. Không dùng `Dockerfile` gốc
+### 11.6. Không dùng `Dockerfile` gốc
 
 `Dockerfile` ở thư mục gốc chạy `CMD python3 python/ocr_server.py & node src/app.js`.
 Cách này có ba vấn đề: PID 1 là shell nên không chuyển tiếp `SIGTERM`; nếu tiến
@@ -692,7 +723,7 @@ OCR hỏng âm thầm; và không có cơ chế dọn tiến trình zombie.
 Bố cục hai service trong tài liệu này thay thế cho nó. Có thể xoá `Dockerfile` cũ
 sau khi stack mới chạy ổn định.
 
-### 11.6. File `.env` từng bị commit lên Git
+### 11.7. File `.env` từng bị commit lên Git
 
 Lịch sử repo có 6 commit chứa file `.env`. Nội dung bị lộ chỉ gồm `APPSCRIPT_URL`
 và `PORT` — không có mật khẩu database hay API key. Dù vậy, nếu URL Apps Script

@@ -45,6 +45,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const pool = require('./config/database');
+const { requireAuth } = require('./middlewares/requireAuth');
 
 const appsScriptRoutes = require('./routes/appsScriptRoutes');
 const authRouter = require('./routes/authRouter');
@@ -70,6 +71,13 @@ app.use(
     limit: process.env.JSON_BODY_LIMIT || '25mb',
   })
 );
+
+// ========================================
+// Xác thực
+// ========================================
+// Chặn trước toàn bộ route phía dưới. Danh sách đường dẫn công khai nằm trong
+// PUBLIC_ROUTES của middleware (login + các endpoint health).
+app.use(requireAuth);
 
 // ========================================
 // API Routes

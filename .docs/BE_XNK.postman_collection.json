@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "be-xnk-0000-4000-8000-000000000001",
     "name": "BE_XNK — Dashboard Backend",
-    "description": "Collection cho backend BE_XNK (Node/Express + Python OCR).\n\n## Cài đặt nhanh\n1. Import kèm file environment `BE_XNK.postman_environment.json`.\n2. Chọn environment, sửa `baseUrl` cho đúng nơi BE đang chạy.\n3. Gọi `00 · Health` để xác nhận kết nối.\n4. Gọi `01 · Auth > Login` — token được lưu tự động vào `{{token}}`.\n\n## Xác thực\nHiện **không** có middleware xác thực: `jwt.verify` không xuất hiện ở bất kỳ đâu trong `src/`. Mọi endpoint gọi được mà không cần token. Collection vẫn cấu hình sẵn Bearer `{{token}}` ở cấp collection để khi bổ sung middleware thì không phải sửa lại.\n\n## Lưu ý\n- OCR: dùng form-data, field tên `file`, không tự set Content-Type.\n- Tăng request timeout lên >= 200000ms vì OCR chạy lâu.\n",
+    "description": "Collection cho backend BE_XNK (Node/Express + Python OCR).\n\n## Cài đặt nhanh\n1. Import kèm file environment `BE_XNK.postman_environment.json`.\n2. Chọn environment, sửa `baseUrl` cho đúng nơi BE đang chạy.\n3. Gọi `00 · Health` để xác nhận kết nối.\n4. Gọi `01 · Auth > Login` — token được lưu tự động vào `{{token}}`.\n\n## Xác thực\nAPI yêu cầu `Authorization: Bearer <token>` cho **mọi** endpoint, trừ `POST /api/auth/login` và các endpoint health. Collection đã đặt sẵn Bearer `{{token}}` ở cấp collection, nên chỉ cần chạy Login một lần là các request còn lại tự dùng token đó.\n\nToken hết hạn theo `JWT_EXPIRES_IN` (mặc định 1d). Hết hạn sẽ nhận 401 \"Token đã hết hạn, vui lòng đăng nhập lại\" — chạy lại Login.\n\n## Lưu ý\n- OCR: dùng form-data, field tên `file`, không tự set Content-Type.\n- Tăng request timeout lên >= 200000ms vì OCR chạy lâu.\n",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -100,7 +100,7 @@
     },
     {
       "name": "01 · Auth",
-      "description": "CẢNH BÁO: hiện KHÔNG có middleware xác thực nào trong src/ (jwt.verify không xuất hiện ở đâu). Login có cấp token nhưng không endpoint nào kiểm tra. Mọi request dưới đây chạy được mà không cần token.",
+      "description": "Chỉ POST /login là công khai. Mọi endpoint khác trong nhóm này — kể cả register — đều cần header Authorization: Bearer <token>. Chạy Login trước, token được lưu tự động vào {{token}}.",
       "item": [
         {
           "name": "Login (tự lưu token)",
