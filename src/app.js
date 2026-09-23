@@ -44,7 +44,6 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-
 const pool = require('./config/database');
 
 const appsScriptRoutes = require('./routes/appsScriptRoutes');
@@ -84,21 +83,24 @@ app.use('/api', businessRoutes);
 // ========================================
 // Health check - dùng cho Docker healthcheck / reverse proxy
 // ========================================
-app.get('/health', async (req, res) => {
+// Chỉ database quyết định status code: DB hỏng -> 503 và Docker đánh dấu
+// container unhealthy. OCR chết chỉ hiện trong checks.ocr nhưng vẫn trả 200,
+// vì phần lớn API không phụ thuộc OCR.
+app.get(['/health', '/api/health'], async (req, res) => {
   const checks = { database: 'unknown', ocr: 'unknown' };
 
   await Promise.all([
     pool.query('select 1')
       .then(() => { checks.database = 'ok'; })
       .catch((error) => { checks.database = `fail: ${error.message}`; }),
-
     (async () => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 3000);
       try {
-        // OCR chỉ nhận POST /ocr/analyze; mọi phản hồi HTTP đều chứng tỏ service còn sống.
-        await fetch(`${PYTHON_OCR_URL}/health`, { signal: controller.signal });
-        checks.ocr = 'ok';
+        const response = await fetch(`${PYTHON_OCR_URL}/health`, {
+          signal: controller.signal,
+        });
+        checks.ocr = response.ok ? 'ok' : `fail: HTTP ${response.status}`;
       } catch (error) {
         checks.ocr = `fail: ${error.name === 'AbortError' ? 'timeout' : error.message}`;
       } finally {
@@ -110,9 +112,57 @@ app.get('/health', async (req, res) => {
   const healthy = checks.database === 'ok';
   return res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'degraded',
+    node: 'ok',
+    python: checks.ocr,
     checks,
     uptime: Math.round(process.uptime()),
   });
+});
+
+// Health check riêng cho Node API và PostgreSQL.
+app.get('/node/health', async (req, res) => {
+  try {
+    await pool.query('select 1');
+    return res.status(200).json({
+      status: 'ok',
+      service: 'node-api',
+      database: 'ok',
+      uptime: Math.round(process.uptime()),
+    });
+  } catch (error) {
+    return res.status(503).json({
+      status: 'degraded',
+      service: 'node-api',
+      database: 'fail',
+      message: error.message,
+    });
+  }
+});
+
+// Python không public port trong Docker; Node chuyển tiếp health check nội bộ.
+app.get('/python/health', async (req, res) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+
+  try {
+    const response = await fetch(`${PYTHON_OCR_URL}/health`, {
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    return res.status(response.ok ? 200 : 503).json({
+      status: response.ok ? 'ok' : 'degraded',
+      service: 'python-ocr',
+      ...data,
+    });
+  } catch (error) {
+    return res.status(503).json({
+      status: 'down',
+      service: 'python-ocr',
+      message: error.name === 'AbortError' ? 'Python OCR timeout' : error.message,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 });
 
 // ========================================
@@ -133,8 +183,8 @@ if (require.main === module) {
     console.log(`Server running at http://localhost:${port}`);
   });
 
-  // Docker/Kubernetes gửi SIGTERM khi dừng container. Nếu không xử lý, tiến trình
-  // bị SIGKILL sau thời gian chờ và các request đang dở bị cắt ngang.
+  // Docker gửi SIGTERM khi dừng container. Nếu không xử lý, tiến trình bị
+  // SIGKILL sau thời gian chờ và các request đang dở bị cắt ngang.
   const shutdown = (signal) => {
     console.log(`${signal} - đang đóng server...`);
     server.close(() => {

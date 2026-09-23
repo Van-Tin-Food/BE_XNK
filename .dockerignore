@@ -8,6 +8,8 @@
 
 # Dependencies: để npm ci / pip install dựng lại trong image
 node_modules
+__pycache__
+*.pyc
 
 # Secrets - tuyệt đối không đưa vào image
 .env
@@ -24,6 +26,11 @@ build
 coverage
 *.log
 
+# Thư mục tạm khi chạy
+uploads
+tmp
+temp
+
 # File Docker không cần nằm trong build context
 Dockerfile
 Dockerfile.*
@@ -34,6 +41,7 @@ docker-compose*.yml
 DEPLOY.md
 README.md
 *.md
+.docs
 
 # Apps Script của dự án khác, không thuộc backend này
 update_funtions
@@ -41,6 +49,10 @@ update_funtions
 # Credentials
 firebase-notification.json
 nofication-xnk-firebase-adminsdk-*
+
+# Bản sao repo lồng nhau (nếu có)
+.BE_XNK
+BE_XNK
 
 # IDE / OS
 .vscode

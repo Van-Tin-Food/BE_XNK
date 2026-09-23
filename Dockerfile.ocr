@@ -5,7 +5,7 @@ FROM python:3.12-slim-bookworm
 # tesseract-ocr-vie cần cho chứng từ tiếng Việt: ocr_server.py tự dùng "eng+vie"
 # nếu phát hiện gói vie, ngược lại lùi về "eng".
 #
-# Retry loop: CDN Fastly của deb.debian.org occasionally trả 403 forbidden khi
+# Retry loop: CDN Fastly của deb.debian.org thỉnh thoảng trả 403 forbidden khi
 # apt-get update bắn đồng thời nhiều request (main/updates/security) - đã xác
 # nhận qua test thật trên VM300 (request đơn lẻ luôn 200, apt-get update thì
 # hay dính 403). Retry là cách chuẩn cho lỗi CDN thoáng qua này.
@@ -35,11 +35,10 @@ ENV PYTHON_OCR_HOST=0.0.0.0 \
 
 EXPOSE 8001
 
-# Kiểm tra ở mức TCP: ocr_server.py chỉ định nghĩa do_POST nên mọi GET đều trả
-# 501, dùng HTTP client sẽ phải bắt HTTPError rồi coi đó là "sống" - vòng vo và
-# dễ sai. Mở được kết nối tới cổng là đủ để biết tiến trình còn nhận request.
-# Hạn chế: không phát hiện được trường hợp tiến trình treo mà cổng vẫn mở.
+# ocr_server.py có sẵn GET /health trả 200 JSON, nên kiểm tra được ở mức HTTP
+# thật thay vì chỉ dò cổng TCP: cách này phát hiện được cả trường hợp tiến trình
+# treo mà cổng vẫn mở.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import socket; socket.create_connection(('127.0.0.1', 8001), 4).close()"
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=4)"
 
 CMD ["python", "python/ocr_server.py"]

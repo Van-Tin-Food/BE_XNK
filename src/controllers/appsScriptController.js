@@ -34,13 +34,23 @@ async function moveCompletedOrder(req, res) {
 async function uploadDocument(req, res) {
   const body = req.body || {};
   const requestId = body.requestId || randomUUID();
-  const orderCode = body.orderCode || body.order_code || body.ma_hop_dong;
-  const documentCode = body.documentCode || body.document_code;
+  const orderCode = String(body.orderCode || body.order_code || body.ma_hop_dong || '').trim().toUpperCase();
+  const inputDocumentCode = body.documentCode || body.document_code;
+  const documentCode = resolveDocumentCode(inputDocumentCode);
   const fileName = body.fileName || body.file_name;
   const fileData = body.fileData || body.file_data || body.fileBase64 || body.base64;
   const { mimeType, referenceCode, idChiTiet } = body;
-  if (!orderCode || !documentCode || !fileName || !fileData) {
-    return res.status(400).json({ success: false, message: 'Thieu thong tin upload' });
+  if (!orderCode || !inputDocumentCode || !fileName || !fileData) {
+    return res.status(400).json({
+      success: false,
+      message: 'Thieu orderCode, documentCode, fileName hoac fileData',
+    });
+  }
+  if (!documentCode) {
+    return res.status(400).json({
+      success: false,
+      message: `documentCode khong hop le: ${inputDocumentCode}`,
+    });
   }
 
   let uploadedFile = null;

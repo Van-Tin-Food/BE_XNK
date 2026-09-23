@@ -44,7 +44,7 @@ module.exports = {
   },
   vanChuyenContainer: {
     table: 'van_chuyen_container', idColumn: 'id_van_chuyen',
-    columns: ['id_van_chuyen', 'id_bl_container', 'ngay_van_chuyen', 'nha_xe', 'ten_tai_xe', 'bien_so_xe', 'noi_di', 'id_kho', 'ghi_chu'],
+    columns: ['id_van_chuyen', 'id_bl_container', 'ngay_van_chuyen', 'nha_xe', 'ten_tai_xe', 'bien_so_xe', 'noi_di', 'id_kho', 'noi_tra_container', 'ghi_chu'],
   },
   chungTuDrive: {
     table: 'chung_tu_drive', idColumn: 'order_code',

@@ -119,10 +119,9 @@ nếu phát hiện có gói này, không có thì lùi về `eng` và mất dấ
 `PYTHON_OCR_HOST` được đặt `0.0.0.0` ngay trong image. Mặc định trong code là
 `127.0.0.1`, để nguyên thì container `api` không gọi sang được.
 
-Healthcheck kiểm tra ở mức TCP thay vì HTTP, vì `ocr_server.py` chỉ định nghĩa
-`do_POST` nên mọi GET đều trả `501` — dùng HTTP client sẽ phải bắt lỗi rồi coi đó
-là "sống", vòng vo và dễ sai. Đổi lại, cách này không phát hiện được trường hợp
-tiến trình treo mà cổng vẫn mở.
+Healthcheck gọi `GET /health` của chính `ocr_server.py` (trả `200` kèm JSON
+`{"status":"ok","service":"python-ocr"}`). Cách này phát hiện được cả trường hợp
+tiến trình treo mà cổng vẫn mở — điều mà kiểm tra ở mức TCP không làm được.
 
 ### 3.4. `docker-compose.yml`
 
@@ -298,6 +297,13 @@ và tải Tesseract.
 ---
 
 ## 6. Kết nối PostgreSQL
+
+> **Trạng thái thật (2026-09-18):** đã chuyển từ Render sang PostgreSQL 17 tự host trên LXC200
+> (`10.0.1.20:5432`, DatabaseNet nội bộ — máy này vốn chạy MariaDB + MSSQL Express, PostgreSQL là
+> engine thứ 3 cài thêm). `DB_SSL=false` vì là LAN nội bộ, không phải dịch vụ managed. Xem
+> `.docs/plan-postgresql-lxc200.md` để biết bối cảnh/quyết định đầy đủ. Mục 6.1 dưới đây giữ
+> nguyên làm tài liệu tham khảo cho trường hợp dùng lại dịch vụ managed (Render/Supabase/RDS...)
+> trong tương lai.
 
 ### 6.1. PostgreSQL trên máy khác hoặc dịch vụ managed
 
@@ -627,23 +633,32 @@ link kèm `autoFill: false` — người dùng mở trang rồi tự nhập B/L.
 
 ### 11.2. Health endpoint
 
-`GET /health` kiểm tra kết nối database và service OCR:
+Có 4 endpoint, phục vụ các mục đích khác nhau:
+
+| Endpoint | Kiểm tra | Dùng khi |
+|----------|----------|----------|
+| `GET /health` | Database + OCR | Docker healthcheck, reverse proxy |
+| `GET /api/health` | Giống trên | Frontend gọi qua prefix `/api` |
+| `GET /node/health` | Chỉ Node + database | Khoanh vùng lỗi ở phía Node |
+| `GET /python/health` | Chỉ OCR (Node chuyển tiếp) | Kiểm tra OCR mà không cần mở port ra ngoài |
 
 ```json
 {
   "status": "ok",
+  "node": "ok",
+  "python": "ok",
   "checks": { "database": "ok", "ocr": "ok" },
   "uptime": 7
 }
 ```
 
-Quy ước status code: **chỉ database quyết định** kết quả. DB hỏng → `503`, Docker
-sẽ đánh dấu container unhealthy. OCR chết chỉ hiện trong `checks.ocr` nhưng vẫn
-trả `200`, vì phần lớn API không phụ thuộc OCR — để OCR làm cả API bị restart thì
-thiệt hơn lợi.
+Quy ước status code của `/health`: **chỉ database quyết định** kết quả. DB hỏng →
+`503`, Docker sẽ đánh dấu container unhealthy. OCR chết chỉ hiện trong
+`checks.ocr` nhưng vẫn trả `200`, vì phần lớn API không phụ thuộc OCR — để OCR
+làm cả API bị restart thì thiệt hơn lợi.
 
-Kiểm tra OCR coi mọi phản hồi HTTP là còn sống, kể cả `501`, vì `ocr_server.py`
-chỉ định nghĩa `do_POST` nên trả `501` với mọi request GET.
+Service OCR có endpoint `/health` riêng (`do_GET` trong `ocr_server.py`), nên
+Node kiểm tra bằng HTTP status thật chứ không phải chỉ dò cổng.
 
 ### 11.3. Graceful shutdown
 

@@ -1,6 +1,10 @@
 # Stack BE_XNK: api (Node) + ocr (Python/Tesseract).
 # Biến môi trường đọc từ file .env đặt cạnh file này - xem .env.example.
 # Hướng dẫn đầy đủ: DEPLOY.md
+#
+# PostgreSQL nằm ngoài stack, trên LXC200 (10.0.1.20). Đặt DB_HOST/DB_PORT/
+# DB_USER/DB_PASSWORD/DB_NAME trong .env hoặc trong Environment variables của
+# stack Portainer - xem .docs/plan-postgresql-lxc200.md.
 
 services:
   api:
@@ -20,11 +24,13 @@ services:
       PORT: 5000
       JSON_BODY_LIMIT: ${JSON_BODY_LIMIT:-25mb}
 
+      # PostgreSQL trên LXC200, không chạy trong stack này.
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      # LAN nội bộ nên mặc định tắt SSL. Đặt true nếu quay lại dùng DB managed.
       DB_SSL: ${DB_SSL:-false}
 
       JWT_SECRET: ${JWT_SECRET}
@@ -37,7 +43,10 @@ services:
       PYTHON_OCR_URL: http://ocr:8001
       CARRIER_FETCH_TIMEOUT: ${CARRIER_FETCH_TIMEOUT:-30000}
     depends_on:
-      - ocr
+      # Chờ ocr healthy rồi mới khởi động api, để /health không báo degraded
+      # trong vài giây đầu chỉ vì ocr chưa sẵn sàng.
+      ocr:
+        condition: service_healthy
     healthcheck:
       # /health kiểm tra cả kết nối database, trả 503 khi DB hỏng.
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -72,6 +81,12 @@ services:
     # không giới hạn số luồng nên nhiều file lớn cùng lúc sẽ cộng dồn bộ nhớ.
     # Gặp exit code 137 (OOM) thì nâng giá trị này - xem DEPLOY.md mục 10.5.
     mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     logging:
       driver: json-file
       options:

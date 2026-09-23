@@ -48,8 +48,8 @@ OCR_CONFIDENCE_WARNING = 60
 AI_CONFIDENCE_WARNING = 75
 PI_CURRENCY = "USD"
 DOCUMENTS = {
-    "PI": ["Số HĐ", "Ngày HĐ PI", "Nhà cung cấp", "Tên hàng", "Item code", "Giá tổng", "Đơn giá"],
-    "INV": ["INV", "Ngày INV"],
+    "PI": ["Số HĐ", "Ngày HĐ PI","Nhà cung cấp","XUẤT XỨ"],
+    "INV": ["INV","Ngày INV","Tên hàng","Item code","Giá tổng","Đơn giá",],
     "PKL": ["Số hộp", "Trọng lượng (NET)"],
     "Bill": ["BL NO.", "Số Container", "Hãng tàu", "Cảng đi", "Cảng đến", "ETD"],
 }
@@ -69,7 +69,12 @@ NCC_RECORDS = [
     {"id": "NCC003", "name": "TONNIES", "country": "Germany"},
     {"id": "NCC004", "name": "SEARA", "country": "Netherlands"},
     {"id": "NCC005", "name": "DLA&Associates Inc", "country": "Canada"},
+    {"id": "NCC006", "name": "Vetracom Limited", "country": "Hong Kong"},
     {"id": "NCC007", "name": "Patel", "country": "Spain"},
+    {"id": "NCC008", "name": "FRIBIN", "country": "Spain"},
+    {"id": "NCC009", "name": "RIVASAM", "country": "Spain"},
+    {"id": "NCC010", "name": "CINCO VILLAS", "country": "Spain"},
+    {"id": "NCC011", "name": "FRIVALL", "country": "Spain"},
 ]
 
 CARRIER_NAMES = [
@@ -105,36 +110,27 @@ PRODUCT_ORIGIN_COUNTRIES = {
 }
 
 DOCUMENT_INSTRUCTIONS = {
-    "PI": """QUY TẮC CHO PI:
-- Đây là tệp văn bản rõ ràng; ưu tiên đọc trực tiếp đúng nhãn và giá trị.
-- Số HĐ là mã PI/đơn hàng theo nhãn Order No., Order Number, REF, Reference, PI No. hoặc PO No.
-- Ngày HĐ PI là ngày của proforma invoice, không lấy ngày giao hàng hoặc ngày sản xuất.
-- Nhà cung cấp là bên bán trực tiếp cho công ty: ưu tiên công ty phát hành PI, Seller, bên ký bán hoặc bên thụ hưởng thanh toán.
-- Một nhà sản xuất/NCC nguồn nằm trong mô tả hàng không được thay thế Nhà cung cấp trực tiếp.
-- XUẤT XỨ là xuất xứ của hàng hóa; với NCC ngoài danh sách chuẩn, được suy luận từ Product origin, Country of origin hoặc quốc gia đi cùng nhà sản xuất/NCC nguồn trong mô tả hàng.
-- Cảng đến nếu nhận diện được Cat Lai/Cát Lai/HCMC/Ho Chi Minh City/Saigon thì trả mã HCM; nếu nhận diện được Hai Phong/Hải Phòng thì trả mã HP. Không trả tên cảng đầy đủ.
-- Tên hàng là tên sản phẩm.
-- Item code là mã hàng/item code nếu PI có ghi rõ; nếu không có thì trả chuỗi rỗng. Không tự tạo hoặc suy đoán Item code.
-- Giá tổng ưu tiên TOTAL hoặc TOTAL AMOUNT nếu có.
-- Nếu không ghi tổng trực tiếp, được phép cộng các đợt thanh toán khi tổng tỷ lệ bằng 100%.
-- Cũng được phép tính Quantity × Unit Price sau khi đổi đúng đơn vị, ví dụ KGS sang MT.
-- Không lấy riêng tiền đặt cọc, prepayment, khoản 30% hoặc khoản 70% làm Giá tổng.
-- Nếu nhiều cách tính cho cùng kết quả thì dùng kết quả đó và ghi phép tính trong _reason.""",
-    "INV": """QUY TẮC CHO INV:
-- Đây là tệp văn bản rõ ràng; ưu tiên đọc trực tiếp đúng nhãn và giá trị.
-- INV là Invoice Number/Invoice No. trong đúng vùng thông tin của hóa đơn.
-- Khi biểu mẫu có hai ô cạnh nhau INVOICE NUM và SPECIFICATION INVOICE, phải xem đây là hai trường hoàn toàn khác nhau.
-- Mã được in ngay dưới barcode trong ô INVOICE NUM là mã INV, kể cả khi OCR đẩy mã đó xuống dòng sau.
-- Giá trị nằm trong ô SPECIFICATION INVOICE không phải mã INV và tuyệt đối không được chọn thay thế.
-- Không chọn mã chỉ vì nó xuất hiện sớm hơn hoặc gần dòng tiêu đề hơn trong văn bản OCR.
-- Không nhầm INV với Customer Code, VAT/Tax Number, EAN, ORDER, PI hoặc mã tham chiếu khác.
-- Ngày INV phải lấy từ DATE, Date of Invoice hoặc Invoice Date trong ngữ cảnh hóa đơn.
-- Nếu DATE đứng cạnh PAYM DATE, lấy giá trị thuộc cột DATE; không lấy giá trị thuộc PAYM DATE.
-- Không dùng Loading Date, Shipment Date, Delivery Date, Payment Date, PAYM DATE hoặc Due Date.
-- Giữ nguyên mã, bao gồm số 0 đầu, dấu chấm, dấu gạch và dấu /.""",
+"PI": """QUY TẮC CHO PI:
+- Chỉ lấy 2 trường Số HĐ và Ngày HĐ PI, cùng Nhà cung cấp và XUẤT XỨ.
+- Số HĐ là mã PI/đơn hàng theo các nhãn Order No., Order Number, REF, Reference, PI No. hoặc PO No.
+- Ngày HĐ PI là ngày của Proforma Invoice; không lấy ngày giao hàng, ngày sản xuất hoặc ngày khác.
+- Nhà cung cấp là bên bán/phát hành PI trực tiếp cho công ty, không lấy nhà sản xuất/NCC nguồn trong mô tả hàng.
+- Nếu nhà cung cấp thuộc danh sách NCC cấu hình thì chuẩn hóa về tên NCC trong danh sách.
+- XUẤT XỨ là xuất xứ hàng hóa; ưu tiên Country of Origin, Product Origin, Origin hoặc vùng mô tả hàng.
+- Không tự tạo hoặc suy đoán Số HĐ hay Ngày HĐ PI.
+- Không trích xuất Tên hàng, Item code, Giá tổng hoặc Đơn giá trong PI.""",
+   "INV": """QUY TẮC CHO INV:
+- Đây là hóa đơn thương mại; phải đọc toàn bộ nội dung trước khi chọn dữ liệu.
+- INV là Invoice Number/Invoice No. đúng ngữ cảnh, không nhầm với Customer Code, VAT/Tax Number, EAN, ORDER, PI hoặc mã tham chiếu.
+- Nếu có ô INVOICE NUM và SPECIFICATION INVOICE, mã trong INVOICE NUM là INV.
+- Ngày INV chỉ lấy từ DATE, Date of Invoice hoặc Invoice Date; không lấy PAYM DATE, Loading Date, Shipment Date, Delivery Date hoặc Due Date.
+- Giữ nguyên mã INV, gồm số 0 đầu, dấu chấm, dấu gạch và dấu /.
+- Tên hàng và Item code lấy theo từng mặt hàng; không tự tạo Item code.
+- Giá tổng ưu tiên TOTAL, TOTAL AMOUNT hoặc GRAND TOTAL; Đơn giá lấy đúng Unit Price/Unit Cost/Price của từng mặt hàng.
+- Nếu không tìm thấy trường nào thì trả chuỗi rỗng.""",
     "PKL": """QUY TẮC CHO PKL:
 - PKL có nhiều dòng chi tiết theo từng thùng/lô nên bắt buộc đọc đúng tiêu đề và thứ tự cột.
-- Số hộp là tổng BOXES, CARTONS hoặc CAJAS.
+- Số hộp hoặc số kiện là tổng BOXES, CARTONS hoặc CAJAS lưu ý không phải Paletts.
 - Chỉ cần trả về số lượng kiện dạng số; không bắt buộc phải nhận diện hoặc trả về đơn vị kiện hàng (thùng, carton, box...).
 - Trọng lượng (NET) là tổng NET WEIGHT, tức trọng lượng tịnh.
 - Nếu có dòng TOTAL, lấy các giá trị trên dòng TOTAL rồi cộng lại toàn bộ dòng chi tiết để kiểm tra.
@@ -158,15 +154,34 @@ DOCUMENT_INSTRUCTIONS = {
 - Dùng tiêu đề chứng từ, đơn vị phát hành và ngữ cảnh trường để phân biệt các mã hoặc tên gần nhau.""",
 }
 
+
 NUMBER_FORMAT_INSTRUCTIONS = """QUY TẮC CHUẨN HÓA SỐ:
+
 - Được phép sửa dấu phân cách số bị OCR sai dựa trên ngữ cảnh và phép kiểm tra tổng.
-- Dùng dấu chấm phân cách hàng nghìn và dấu phẩy phân cách phần thập phân.
-- Số hộp trả về dạng số nguyên có dấu hàng nghìn, ví dụ 2592 hoặc 2,592 thành 2.592.
-- NET trả về 2 chữ số thập phân, ví dụ 25920 hoặc 25,920.00 thành 25.920,00.
-- Giá tổng trả về theo dạng "số LOẠI_TIỀN", ví dụ 1.250,50 USD, 25.920,00 EUR hoặc 1.000.000 VND.
-- Lấy đúng loại tiền gắn với giá tổng trong chứng từ. Không quy đổi USD, EUR, EURO, VND hoặc VNĐ sang đồng tiền khác.
+
+- Dùng format số quốc tế:
+  + Dấu phẩy (,) để phân tách hàng nghìn.
+  + Dấu chấm (.) để phân tách phần thập phân.
+
+- Số hộp trả về dạng số nguyên, không có dấu phân cách hàng nghìn.
+  Ví dụ: 8719, 9181233.
+
+- NET trả về 2 chữ số thập phân và có dấu phẩy phân tách hàng nghìn.
+  Ví dụ:
+  25920 → 25,920.00
+  25920.5 → 25,920.50
+  762719.22 → 762,719.22
+
+- Giá tổng trả về theo dạng "số LOẠI_TIỀN", có 2 chữ số thập phân và có dấu phẩy phân tách hàng nghìn.
+  Ví dụ:
+  25920.5 USD → 25,920.50 USD
+  989121.87 USD → 989,121.87 USD
+
+- Lấy đúng loại tiền gắn với giá tổng trong chứng từ.
+
 - Nếu chứng từ chỉ có ký hiệu tiền tệ, giữ đúng ký hiệu đó khi không đủ căn cứ xác định mã tiền.
-- Nếu không thấy loại tiền, không được tự đoán; trả số tiền và ghi rõ thiếu loại tiền trong _reason."""
+
+- Nếu không thấy loại tiền, không được tự đoán; trả số tiền và ghi rõ thiếu loại tiền trong _reason.""" 
 
 MONTHS_EN = {
     "january": 1, "february": 2, "march": 3, "april": 4,
@@ -224,7 +239,7 @@ def normalize_date(value):
 
 
 def prepare_image(image):
-    """Reduce oversized images before sending them to Tesseract."""
+    """Reduce oversized images before sending them to Tesseract."""                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
     pixels = image.width * image.height
     if pixels > MAX_OCR_PIXELS:
         scale = (MAX_OCR_PIXELS / pixels) ** 0.5
@@ -414,11 +429,11 @@ def build_extraction_prompt(ocr_text, doc_type):
     """Tạo prompt tiếng Việt; chỉ PKL được phép tính tổng từ dòng chi tiết."""
     fields = DOCUMENTS[doc_type]
     output_shape = ""
-    if doc_type in {"PI", "Bill"}:
+    if doc_type in {"INV", "Bill"}:
         output_shape = """
 QUY TẮC TRẢ VỀ DẠNG MẢNG:
 - Luôn trả về JSON có key items là một mảng.
-- Với PI, mỗi phần tử trong items là một mặt hàng riêng.
+- Với INV, mỗi phần tử trong items là một mặt hàng riêng.
 - Với Bill/BL, mỗi phần tử trong items là một container hoặc một dòng dữ liệu BL riêng.
 - Nếu chỉ có một mặt hàng/container thì items vẫn là mảng có một phần tử.
 - Nếu không có Item code thì trả chuỗi rỗng; không tự tạo hoặc suy đoán mã.
@@ -482,9 +497,14 @@ NGUYÊN TẮC CHUNG:
 
 {output_shape}
 
-QUY TẮC RIÊNG CHO TIỀN PI:
-- Đơn vị tiền thanh toán và các trường Giá tổng/Đơn giá luôn là USD.
-- Không trả về EUR, VND hoặc loại tiền khác; không cần suy đoán hay quy đổi sang loại tiền khác.
+    QUY TẮC RIÊNG CHO TIỀN:
+    - Giá tổng và Đơn giá thuộc chứng từ INV.
+    - Lấy đúng loại tiền được ghi trên INV.
+    - Không tự quy đổi tiền tệ.
+    - Nếu INV ghi USD thì trả USD.
+    - Nếu INV ghi EUR thì trả EUR.
+    - Nếu INV ghi VND/VNĐ thì trả VND/VNĐ.
+    - Không tự mặc định tiền tệ nếu chứng từ không có căn cứ.
 
 {supplier_rule}
 {carrier_rule}
@@ -509,9 +529,7 @@ def analyze_with_openrouter(ocr_text, doc_type):
     )
     result = dict(model_result)
     normalize_result_formats(result, doc_type, ocr_text)
-    if doc_type == "PI":
-        reconcile_pi_total(result, ocr_text)
-    elif doc_type == "INV":
+    if doc_type == "INV":
         reconcile_invoice_number(result, ocr_text)
     if "Cảng đến" in result:
         original_port = result.get("Cảng đến", "")
@@ -545,16 +563,16 @@ def analyze_with_openrouter(ocr_text, doc_type):
     model_result = extract_json(
         call_openrouter(build_extraction_prompt(ocr_text, doc_type)),
         fields,
-        as_array=doc_type in {"PI", "Bill"},
+        as_array=doc_type in {"INV", "Bill"},
     )
 
-    if doc_type in {"PI", "Bill"}:
+    if doc_type in {"INV", "Bill"}:
         results = []
+
         for item in model_result:
             normalize_result_formats(item, doc_type, ocr_text)
             results.append(item)
-        if doc_type == "PI" and results:
-            reconcile_pi_total(results[0], ocr_text)
+
         return results
 
     result = dict(model_result)
@@ -638,42 +656,75 @@ def parse_decimal(value):
     except InvalidOperation:
         return None
 
-
 def format_number(
     value,
     decimal_places=None,
     integer=False,
     grouped_thousands=False,
-    decimal_separator=",",
+    decimal_separator=".",
 ):
-    """Chuẩn hóa cách hiển thị nhưng không thay đổi giá trị số."""
+    """Chuẩn hóa số theo format:
+    - Hàng nghìn: dấu ,
+    - Hàng thập phân: dấu .
+    - Số nguyên: không có dấu phân cách hàng nghìn.
+    """
+
     raw_number = re.sub(r"[^0-9,.-]", "", str(value or "").strip())
-    grouped_integer = re.fullmatch(r"-?\d{1,3}(?:[.,]\d{3})+", raw_number)
-    if (integer or grouped_thousands) and grouped_integer:
-        number = Decimal(raw_number.replace(".", "").replace(",", ""))
-    else:
-        number = parse_decimal(value)
-    if number is None:
+
+    if not raw_number or not re.search(r"\d", raw_number):
         return str(value or "").strip()
-    if integer and number == number.to_integral_value():
-        return f"{int(number):,}".replace(",", ".")
+
+    try:
+        if "," in raw_number and "." in raw_number:
+            last_comma = raw_number.rfind(",")
+            last_dot = raw_number.rfind(".")
+
+            if last_comma > last_dot:
+                # 27.990,000
+                normalized = raw_number.replace(".", "").replace(",", ".")
+            else:
+                # 762,719.22
+                normalized = raw_number.replace(",", "")
+
+        elif "," in raw_number:
+            parts = raw_number.split(",")
+
+            # 762,719 -> 762719
+            # 2,799 -> 2799
+            if len(parts) > 1 and all(len(part) == 3 for part in parts[1:]):
+                normalized = "".join(parts)
+            else:
+                # 25920,5 -> 25920.5
+                normalized = raw_number.replace(",", ".")
+
+        elif "." in raw_number:
+            parts = raw_number.split(".")
+
+            # 27.990 -> 27990
+            # 2.799 -> 2799
+            if len(parts) > 1 and all(len(part) == 3 for part in parts[1:]):
+                normalized = "".join(parts)
+            else:
+                # 25920.5 -> 25920.5
+                normalized = raw_number
+
+        else:
+            normalized = raw_number
+
+        number = Decimal(normalized)
+
+    except (InvalidOperation, ValueError):
+        return str(value or "").strip()
+    if integer:
+        return str(int(number))
     if decimal_places is not None:
-        formatted = f"{number:,.{decimal_places}f}"
-        return (
-            formatted.replace(",", "\0")
-            .replace(".", decimal_separator)
-            .replace("\0", ".")
-        )
-    normalized = format(number, "f")
-    if "." in normalized:
-        normalized = normalized.rstrip("0").rstrip(".")
-    whole, separator, fraction = normalized.partition(".")
-    grouped_whole = f"{int(whole):,}".replace(",", ".")
-    return (
-        grouped_whole + decimal_separator + fraction
-        if separator
-        else grouped_whole
-    )
+        return f"{number:,.{decimal_places}f}"
+    formatted = f"{number:,}"
+
+    if decimal_separator != ".":
+        formatted = formatted.replace(".", decimal_separator)
+
+    return formatted
 
 
 def explicit_currencies(text):
@@ -858,13 +909,15 @@ def normalize_result_formats(result, doc_type, ocr_text):
             if normalized != original:
                 changed_fields.append(field)
 
-    if doc_type == "PI":
+    if doc_type == "INV":
         for field in ("Giá tổng", "Đơn giá"):
             if not result.get(field):
                 continue
+
             original = result[field]
             normalized, _ = normalize_money(original, ocr_text)
             result[field] = normalized
+
             if normalized != original:
                 changed_fields.append(field)
 
@@ -1047,7 +1100,7 @@ def analyze_payload(payload):
         ocr_text, ocr_confidence, used_ocr = ocr_file(temporary_path)
         data = analyze_with_openrouter(ocr_text, document_type)
         fields = DOCUMENTS[document_type]
-        final_data = data if document_type in {"PI", "Bill"} else {
+        final_data = data if document_type in {"INV", "Bill"} else {
             field: data.get(field, "") for field in fields
         }
         # Giữ hợp đồng response cũ của BE cho Frontend hiện tại.
@@ -1079,6 +1132,20 @@ def analyze_payload(payload):
             Path(temporary_path).unlink(missing_ok=True)
 
 class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/health":
+            return self.reply(200, {
+                "status": "ok",
+                "service": "python-ocr",
+            })
+        return self.reply(404, {"success": False, "message": "Route not found"})
+
+    def do_HEAD(self):
+        # Render/Docker health probes may use HEAD. Return headers without a body.
+        self.send_response(200 if self.path == "/health" else 404)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_POST(self):
         if self.path != "/ocr/analyze":
             return self.reply(404, {"success": False, "message": "Route not found"})
