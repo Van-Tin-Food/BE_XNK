@@ -1,0 +1,2339 @@
+{
+  "info": {
+    "_postman_id": "be-xnk-0000-4000-8000-000000000001",
+    "name": "BE_XNK — Dashboard Backend",
+    "description": "Collection cho backend BE_XNK (Node/Express + Python OCR).\n\n## Cài đặt nhanh\n1. Import kèm file environment `BE_XNK.postman_environment.json`.\n2. Chọn environment, sửa `baseUrl` cho đúng nơi BE đang chạy.\n3. Gọi `00 · Health` để xác nhận kết nối.\n4. Gọi `01 · Auth > Login` — token được lưu tự động vào `{{token}}`.\n\n## Xác thực\nHiện **không** có middleware xác thực: `jwt.verify` không xuất hiện ở bất kỳ đâu trong `src/`. Mọi endpoint gọi được mà không cần token. Collection vẫn cấu hình sẵn Bearer `{{token}}` ở cấp collection để khi bổ sung middleware thì không phải sửa lại.\n\n## Lưu ý\n- OCR: dùng form-data, field tên `file`, không tự set Content-Type.\n- Tăng request timeout lên >= 200000ms vì OCR chạy lâu.\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 · Health",
+      "description": "Gọi trước tiên khi nghi ngờ mất kết nối. /health là thứ Docker dùng làm healthcheck.",
+      "item": [
+        {
+          "name": "Health tổng (database + OCR)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Chỉ database quyết định status code: DB hỏng -> 503. OCR chết vẫn trả 200, chỉ hiện trong checks.ocr."
+          }
+        },
+        {
+          "name": "Health qua prefix /api",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Health riêng Node + database",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/node/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "node",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Health riêng Python OCR",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/python/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "python",
+                "health"
+              ]
+            },
+            "description": "Node chuyển tiếp sang container ocr (không mở port ra ngoài)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 · Auth",
+      "description": "CẢNH BÁO: hiện KHÔNG có middleware xác thực nào trong src/ (jwt.verify không xuất hiện ở đâu). Login có cấp token nhưng không endpoint nào kiểm tra. Mọi request dưới đây chạy được mà không cần token.",
+      "item": [
+        {
+          "name": "Login (tự lưu token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Script tab Scripts > Post-response sẽ lưu token vào biến môi trường {{token}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.token) {",
+                  "  pm.environment.set(\"token\", res.token);",
+                  "  console.log(\"Da luu token vao bien moi truong\");",
+                  "}",
+                  "if (res && res.data && res.data.id) {",
+                  "  pm.environment.set(\"userId\", res.data.id);",
+                  "}",
+                  "pm.test(\"Login thanh cong\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Đăng ký tài khoản",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Mật khẩu phải >= 6 ký tự, có cả chữ và số.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nguyen Van A\",\n  \"username\": \"nguyenvana\",\n  \"password\": \"matkhau123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Đổi mật khẩu",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/update-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "update-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"nguyenvana\",\n  \"newPassword\": \"matkhaumoi123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Danh sách user",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Chi tiết user",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "{{userId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cập nhật user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ten moi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Nhật ký hoạt động - danh sách",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/activity-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "activity-logs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Nhật ký hoạt động - ghi mới",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/activity-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "activity-logs"
+              ]
+            },
+            "description": "Bắt buộc userId (số) và action.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"action\": \"LOGIN\",\n  \"location\": \"Dashboard\",\n  \"detail\": \"Test tu Postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Tra cứu hãng tàu",
+      "description": "Registry 9 hãng: MSC, COSCO, YML, HAPP, MAERSK, PIL, ONE, CMA, CKLINE.\n\nlookup gọi thẳng endpoint hãng từ server; nhiều hãng có bot protection nên có thể trả 403 - đó là phản hồi thật, không phải lỗi của BE. Response luôn kèm trường url để mở trong trình duyệt.",
+      "item": [
+        {
+          "name": "Danh sách hãng hỗ trợ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tracking/carriers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tracking",
+                "carriers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Lấy link tra cứu (mở trong browser)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tracking/carriers/link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tracking",
+                "carriers",
+                "link"
+              ]
+            },
+            "description": "carrier nhận một trong: MSC, COSCO, YML, HAPP, MAERSK, PIL, ONE, CMA, CKLINE",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"carrier\": \"MAERSK\",\n  \"trackingNumber\": \"123456789\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Tra cứu từ server",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tracking/carriers/lookup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tracking",
+                "carriers",
+                "lookup"
+              ]
+            },
+            "description": "Trả nguyên phản hồi của hãng: status, isJson, json, raw, truncated.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"carrier\": \"MSC\",\n  \"trackingNumber\": \"MEDUQ1234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "CK Line (tương thích ngược)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tracking/ckline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tracking",
+                "ckline"
+              ]
+            },
+            "description": "CK Line dùng WebSquare nên không điền sẵn B/L qua URL được -> trả autoFill: false.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"CKL123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Evergreen",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tracking/evergreen/launch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tracking",
+                "evergreen",
+                "launch"
+              ]
+            },
+            "description": "containerNo phải đúng định dạng 4 chữ cái + 7 số.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"containerNo\": \"TEMU1234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 · OCR chứng từ",
+      "description": "Body phải là form-data. KHÔNG tự set Content-Type - Postman cần tự sinh boundary.\n\nGiới hạn 15MB; chỉ nhận PDF, PNG, JPG, JPEG, WEBP, TIF, TIFF.\nOCR có thể chạy tới 180 giây -> tăng Settings > General > Request timeout lên >= 200000ms.",
+      "item": [
+        {
+          "name": "Phân tích chứng từ",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ocr/analyze",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ocr",
+                "analyze"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Tên field bắt buộc là \"file\" (multer upload.single)."
+                },
+                {
+                  "key": "documentType",
+                  "value": "PI",
+                  "type": "text",
+                  "description": "Chỉ nhận: PI, INV, PKL, Bill (lưu ý \"Bill\" chứ không phải \"BL\")."
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 · Google Drive (Apps Script)",
+      "description": "Các endpoint này gọi sang Google Apps Script qua APPSCRIPT_URL. Timeout mặc định 120 giây.",
+      "item": [
+        {
+          "name": "Upload chứng từ lên Drive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/uploadDocument",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "uploadDocument"
+              ]
+            },
+            "description": "documentCode hợp lệ: PI, INV, BL, PKL, CO, HC, DON_KD, TK, BB_LM, PHI_TK, THUE_NK, 15B, QDTQ, MV, TRA_CONG",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderCode\": \"HD001\",\n  \"documentCode\": \"PI\",\n  \"fileName\": \"PI-HD001.pdf\",\n  \"fileData\": \"<base64-khong-kem-tien-to-data:>\",\n  \"mimeType\": \"application/pdf\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Danh sách chứng từ đã lưu trữ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/getArchivedDocuments?orderCode=HD001",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getArchivedDocuments"
+              ],
+              "query": [
+                {
+                  "key": "orderCode",
+                  "value": "HD001"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Lưu trữ đơn hàng hoàn thành",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/moveCompletedOrder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "moveCompletedOrder"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderCode\": \"HD001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Gửi email nhắc chứng từ thiếu",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sendMissingDocumentEmail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sendMissingDocumentEmail"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to_email\": \"nguoinhan@example.com\",\n  \"to_name\": \"Nguyen Van A\",\n  \"order_code\": \"HD001\",\n  \"missing_docs\": \"PI, PKL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Kiểm tra tiến độ chứng từ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/document-progress/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "document-progress",
+                "check"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderCode\": \"HD001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 · Dữ liệu nghiệp vụ (CRUD)",
+      "description": "12 resource, mỗi resource có đủ GET all / GET by id / POST / PATCH / PUT.\n\nBody POST/PATCH đi thẳng vào service nên các trường phải khớp cột trong bảng PostgreSQL tương ứng. Gọi GET danh sách trước để xem đúng tên cột rồi hãy tạo mới.",
+      "item": [
+        {
+          "name": "nha-cung-cap",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/nha-cung-cap",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "nha-cung-cap"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/nha-cung-cap/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "nha-cung-cap",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/nha-cung-cap",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "nha-cung-cap"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/nha-cung-cap/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "nha-cung-cap",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/nha-cung-cap/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "nha-cung-cap",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "hang-tau",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/hang-tau",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "hang-tau"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/hang-tau/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "hang-tau",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/hang-tau",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "hang-tau"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/hang-tau/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "hang-tau",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/hang-tau/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "hang-tau",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "kho",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/kho",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "kho"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/kho/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "kho",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/kho",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "kho"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/kho/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "kho",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/kho/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "kho",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "mua-hang",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mua-hang",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mua-hang"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mua-hang/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mua-hang",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mua-hang",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mua-hang"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mua-hang/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mua-hang",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/mua-hang/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "mua-hang",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "chi-tiet-mua-hang",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "chi-tiet-mua-hang-item-code",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang-item-code",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang-item-code"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang-item-code/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang-item-code",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang-item-code",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang-item-code"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang-item-code/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang-item-code",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-mua-hang-item-code/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-mua-hang-item-code",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "xnk",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/xnk",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "xnk"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/xnk/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "xnk",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/xnk",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "xnk"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/xnk/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "xnk",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/xnk/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "xnk",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "container",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/container",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "container"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/container/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "container",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/container",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "container"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/container/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "container",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/container/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "container",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "chi-tiet-container",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-container",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-container"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-container/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-container",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-container",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-container"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-container/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-container",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chi-tiet-container/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chi-tiet-container",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "van-chuyen-container",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/van-chuyen-container",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "van-chuyen-container"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/van-chuyen-container/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "van-chuyen-container",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/van-chuyen-container",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "van-chuyen-container"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/van-chuyen-container/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "van-chuyen-container",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/van-chuyen-container/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "van-chuyen-container",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "chung-tu-drive",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chung-tu-drive",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chung-tu-drive"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chung-tu-drive/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chung-tu-drive",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chung-tu-drive",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chung-tu-drive"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chung-tu-drive/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chung-tu-drive",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/chung-tu-drive/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "chung-tu-drive",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "thong-bao",
+          "item": [
+            {
+              "name": "Danh sách",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/thong-bao",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "thong-bao"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Chi tiết theo id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/thong-bao/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "thong-bao",
+                    "1"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Tạo mới",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/thong-bao",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "thong-bao"
+                  ]
+                },
+                "description": "Thay body bằng đúng các cột của bảng. Xem kết quả GET danh sách để biết tên cột.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Tao tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PATCH)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/thong-bao/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "thong-bao",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Cập nhật (PUT)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/thong-bao/1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "thong-bao",
+                    "1"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ghi_chu\": \"Cap nhat tu Postman\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

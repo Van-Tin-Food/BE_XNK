@@ -387,6 +387,10 @@ docker compose ps
 
 Cả `api` và `ocr` phải ở trạng thái `running`.
 
+> **Dùng Postman:** import `.docs/BE_XNK.postman_collection.json` và
+> `.docs/BE_XNK.postman_environment.json`, sửa `baseUrl` rồi gọi thử. Collection
+> có sẵn toàn bộ 83 request và tự lưu token sau khi login.
+
 **Health check** — đây là lệnh đáng chạy đầu tiên, nó kiểm tra luôn cả database và OCR:
 
 ```bash
