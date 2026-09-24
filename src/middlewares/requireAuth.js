@@ -10,6 +10,10 @@ const PUBLIC_ROUTES = new Set([
   'POST /api/auth/login',
   'GET /health',
   'GET /api/health',
+  // CI gọi /version để xác nhận đã deploy đúng bản vừa push; nó chỉ có X-Api-Key
+  // (cổng chặn ở nginx), không có JWT. Nội dung trả về là một chuỗi hash 16 ký tự
+  // của mã nguồn, không lộ gì thêm.
+  'GET /version',
   'GET /node/health',
   'GET /python/health',
 ]);

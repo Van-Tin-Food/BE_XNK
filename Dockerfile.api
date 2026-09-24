@@ -17,6 +17,13 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY src ./src
 
+# Vân tay của mã nguồn trong image, phục vụ endpoint /version và bước xác nhận
+# deploy trong CI. Không dùng commit hash: Portainer build từ bản export của repo,
+# trong build context KHÔNG có thư mục .git, và Actions cũng không phải nơi build
+# nên không truyền được build arg vào. Đặt sau COPY src để layer này chỉ đổi khi
+# mã nguồn thật sự đổi.
+RUN find src -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-16 > /app/SRC_HASH
+
 # node:22 đã có sẵn user "node" (uid 1000), không chạy bằng root.
 USER node
 

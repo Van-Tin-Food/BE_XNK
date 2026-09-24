@@ -94,6 +94,22 @@ app.use('/api', businessRoutes);
 // Chỉ database quyết định status code: DB hỏng -> 503 và Docker đánh dấu
 // container unhealthy. OCR chết chỉ hiện trong checks.ocr nhưng vẫn trả 200,
 // vì phần lớn API không phụ thuộc OCR.
+// Vân tay mã nguồn được Dockerfile.api ghi vào lúc build. CI so giá trị này với
+// hash của image nó vừa build để biết container đang chạy có đúng bản vừa push
+// hay không — /health không phân biệt được bản cũ với bản mới.
+// Chạy trực tiếp bằng npm start (ngoài Docker) thì không có file này: trả "unknown".
+const SRC_HASH = (() => {
+  try {
+    return require('fs').readFileSync('/app/SRC_HASH', 'utf8').trim();
+  } catch {
+    return 'unknown';
+  }
+})();
+
+app.get('/version', (req, res) => {
+  return res.json({ srcHash: SRC_HASH, uptime: Math.round(process.uptime()) });
+});
+
 app.get(['/health', '/api/health'], async (req, res) => {
   const checks = { database: 'unknown', ocr: 'unknown' };
 
