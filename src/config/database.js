@@ -1,6 +1,8 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
+// Các dịch vụ managed (Render, Supabase, RDS...) bắt buộc kết nối qua SSL.
+// Render cấp chứng chỉ self-signed nên không xác thực chuỗi CA được.
 const ssl = String(process.env.DB_SSL || '').toLowerCase() === 'true'
   ? { rejectUnauthorized: false }
   : false;

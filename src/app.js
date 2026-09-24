@@ -45,6 +45,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const pool = require('./config/database');
+const { requireAuth } = require('./middlewares/requireAuth');
 
 const appsScriptRoutes = require('./routes/appsScriptRoutes');
 const authRouter = require('./routes/authRouter');
@@ -54,9 +55,8 @@ const businessRoutes = require('./routes/businessRoutes');
 
 const app = express();
 const port = process.env.PORT || 5000;
-const PYTHON_OCR_URL = String(
-  process.env.PYTHON_OCR_URL || 'http://127.0.0.1:8001'
-).replace(/\/$/, '');
+const PYTHON_OCR_URL = String(process.env.PYTHON_OCR_URL || 'http://127.0.0.1:8001')
+  .replace(/\/$/, '');
 
 // ========================================
 // CORS - Cho phép mọi domain gọi BE
@@ -73,6 +73,13 @@ app.use(
 );
 
 // ========================================
+// Xác thực
+// ========================================
+// Chặn trước toàn bộ route phía dưới. Danh sách đường dẫn công khai nằm trong
+// PUBLIC_ROUTES của middleware (login + các endpoint health).
+app.use(requireAuth);
+
+// ========================================
 // API Routes
 // ========================================
 app.use('/api', appsScriptRoutes);
@@ -81,6 +88,12 @@ app.use('/api/ocr', ocrRoutes);
 app.use('/api/tracking', trackingRoutes);
 app.use('/api', businessRoutes);
 
+// ========================================
+// Health check - dùng cho Docker healthcheck / reverse proxy
+// ========================================
+// Chỉ database quyết định status code: DB hỏng -> 503 và Docker đánh dấu
+// container unhealthy. OCR chết chỉ hiện trong checks.ocr nhưng vẫn trả 200,
+// vì phần lớn API không phụ thuộc OCR.
 app.get(['/health', '/api/health'], async (req, res) => {
   const checks = { database: 'unknown', ocr: 'unknown' };
 
@@ -178,6 +191,8 @@ if (require.main === module) {
     console.log(`Server running at http://localhost:${port}`);
   });
 
+  // Docker gửi SIGTERM khi dừng container. Nếu không xử lý, tiến trình bị
+  // SIGKILL sau thời gian chờ và các request đang dở bị cắt ngang.
   const shutdown = (signal) => {
     console.log(`${signal} - đang đóng server...`);
     server.close(() => {
@@ -185,6 +200,8 @@ if (require.main === module) {
         .catch((error) => console.error('Lỗi khi đóng pool:', error.message))
         .finally(() => process.exit(0));
     });
+
+    // Chốt chặn cuối: nếu sau 15s vẫn còn kết nối treo thì thoát hẳn.
     setTimeout(() => process.exit(1), 15000).unref();
   };
 

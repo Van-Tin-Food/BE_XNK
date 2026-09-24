@@ -1,21 +1,30 @@
+# Node API. Không còn phụ thuộc Playwright/Chromium kể từ khi phần tracking
+# chuyển sang gọi HTTP trực tiếp, nên image chỉ cần Node thuần.
 FROM node:22-bookworm-slim
 
-ENV NODE_ENV=production \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV NODE_ENV=production
+
 WORKDIR /app
 
+# Cài dependencies trước, tách khỏi source để tận dụng cache layer:
+# đổi code mà không đổi package.json thì không phải cài lại.
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev \
-    && npx playwright install --with-deps chromium \
-    && chmod -R 755 /ms-playwright \
-    && npm cache clean --force
+
+# npm ci cài đúng theo package-lock.json để mọi lần build đều giống nhau.
+# bcrypt là native module; trên linux/amd64 có sẵn bản dựng trước. Nếu build
+# trên ARM mà lỗi node-gyp, cài thêm: python3 make g++ trước dòng này.
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY src ./src
 
+# node:22 đã có sẵn user "node" (uid 1000), không chạy bằng root.
 USER node
+
 EXPOSE 5000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+# Healthcheck dùng chính /health (kiểm tra cả kết nối database).
+# Compose cũng khai báo healthcheck; giữ ở đây để image chạy độc lập vẫn có.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:5000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "src/app.js"]
