@@ -12,6 +12,10 @@ services:
       context: .
       dockerfile: Dockerfile.api
     image: be-xnk-api:latest
+    # Stack nay build tu Dockerfile, khong co tren registry nao. GitOps cua Portainer
+    # luon chay "docker compose pull" truoc khi deploy; thieu dong nay pull se bi tu choi
+    # (pull access denied) va deploy dung giua chung - xem DEPLOY.md muc 8.
+    pull_policy: build
     container_name: be-xnk-api
     restart: unless-stopped
     # tini làm PID 1: chuyển tiếp SIGTERM cho Node (app có xử lý graceful
@@ -65,6 +69,7 @@ services:
       context: .
       dockerfile: Dockerfile.ocr
     image: be-xnk-ocr:latest
+    pull_policy: build
     container_name: be-xnk-ocr
     restart: unless-stopped
     init: true
