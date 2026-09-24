@@ -52,7 +52,7 @@ function requireAuth(req, res, next) {
 
   const isLocalhost =
   req.hostname === 'localhost' ||
-  req.hostname === '127.0.0.1' || req.hostname === 'https://be-xnk-1.onrender.com';
+  req.hostname === '127.0.0.1' || req.hostname === 'https://be-xnk-1.onrender.com' || req.hostname === 'https://fe-xnk-xr1z-oyg1je3s5-tin-f547.vercel.app';
 
   if (!isLocalhost && (!/^Bearer$/i.test(scheme || '') || !token)) {
     return unauthorized(res, 'Header Authorization phải có dạng: Bearer <token>');
