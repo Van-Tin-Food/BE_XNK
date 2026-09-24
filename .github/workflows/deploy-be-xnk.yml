@@ -1,0 +1,93 @@
+name: Deploy BE_XNK
+
+# GitOps: push vào nhánh prod -> kiểm tra -> gọi webhook Portainer -> Portainer pull
+# commit mới từ GitHub và build lại stack "be-xnk" trên VM300.
+#
+# Không dùng self-hosted runner: runner ubuntu-latest chỉ cần gọi được 1 endpoint công khai
+# (https://api-xnk.victor.io.vn/deploy-hook), đường này được nginx chặn bằng header X-Deploy-Key
+# rồi chuyển tiếp tới webhook nội bộ của Portainer. Xem homelab-IaC/.env mục BE_XNK_DEPLOY_HOOK_KEY.
+#
+# Secrets cần có trong repo:
+#   DEPLOY_HOOK_KEY - khoá mở đường /deploy-hook trên nginx
+#   BE_API_KEY      - khoá X-Api-Key của API (dùng để gọi /health sau khi deploy)
+
+on:
+  push:
+    branches: [prod]
+    paths:
+      - 'src/**'
+      - 'python/**'
+      - 'Dockerfile.api'
+      - 'Dockerfile.ocr'
+      - 'docker-compose.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-be-xnk.yml'
+  workflow_dispatch:
+
+# Hai lần deploy chồng nhau sẽ làm Portainer build cùng lúc trên cùng một stack.
+concurrency:
+  group: deploy-be-xnk
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Kiểm tra trước khi deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Cú pháp JavaScript
+        run: |
+          for f in $(git ls-files 'src/**/*.js'); do
+            node --check "$f" || exit 1
+          done
+          echo "OK: $(git ls-files 'src/**/*.js' | wc -l) file"
+
+      - name: Cú pháp Python (OCR)
+        run: python3 -m py_compile python/ocr_server.py
+
+      # Build đúng 2 image mà Portainer sẽ build trên server. Bắt sớm lỗi npm ci,
+      # lỗi Dockerfile hay package bị gỡ khỏi registry — trước khi đụng tới prod.
+      - name: Build thử image api
+        run: docker build -f Dockerfile.api -t be-xnk-api:ci .
+
+      - name: Build thử image ocr
+        run: docker build -f Dockerfile.ocr -t be-xnk-ocr:ci .
+
+  deploy:
+    name: Deploy qua webhook Portainer
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gọi webhook
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 -X POST \
+            -H "X-Deploy-Key: ${{ secrets.DEPLOY_HOOK_KEY }}" \
+            https://api-xnk.victor.io.vn/deploy-hook)
+          echo "webhook -> HTTP $code"
+          [ "$code" = "204" ] || { echo "Webhook không nhận (kỳ vọng 204)"; exit 1; }
+
+      # Portainer trả 204 ngay rồi build/redeploy bất đồng bộ, nên phải tự xác nhận.
+      # uptime trong /health reset về 0 khi container khởi động lại -> dùng nó để
+      # phân biệt "đã deploy xong" với "vẫn là container cũ".
+      - name: Chờ stack khởi động lại và database xanh
+        run: |
+          for i in $(seq 1 30); do
+            body=$(curl -sS -m 10 -H "X-Api-Key: ${{ secrets.BE_API_KEY }}" \
+              https://api-xnk.victor.io.vn/health || true)
+            echo "[$i] $body"
+            uptime=$(echo "$body" | sed -n 's/.*"uptime":\([0-9]*\).*/\1/p')
+            if echo "$body" | grep -q '"database":"ok"' \
+               && [ -n "$uptime" ] && [ "$uptime" -lt 300 ]; then
+              echo "Deploy xong: container mới (uptime ${uptime}s), database ok"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Không xác nhận được deploy sau 5 phút — kiểm tra stack be-xnk trên Portainer"
+          exit 1
