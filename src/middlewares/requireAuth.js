@@ -54,9 +54,9 @@ function requireAuth(req, res, next) {
   req.hostname === 'localhost' ||
   req.hostname === '127.0.0.1';
 
-  if (!isLocalhost && (!/^Bearer$/i.test(scheme || '') || !token)) {
-    return unauthorized(res, 'Header Authorization phải có dạng: Bearer <token>');
-  }
+  // if (!isLocalhost && (!/^Bearer$/i.test(scheme || '') || !token)) {
+  //   return unauthorized(res, 'Header Authorization phải có dạng: Bearer <token>');
+  // }
 
   try {
     req.user = jwt.verify(token, secret);
