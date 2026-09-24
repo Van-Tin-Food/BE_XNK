@@ -42,21 +42,21 @@ function requireAuth(req, res, next) {
     });
   }
 
-  // const header = String(req.headers.authorization || '').trim();
-  // if (!header) return unauthorized(res, 'Thiếu header Authorization');
+  const header = String(req.headers.authorization || '').trim();
+  if (!header) return unauthorized(res, 'Thiếu header Authorization');
 
-  // const [scheme, token] = header.split(/\s+/);
-  // if (!/^Bearer$/i.test(scheme || '') || !token) {
-  //   return unauthorized(res, 'Header Authorization phải có dạng: Bearer <token>');
-  // }
+  const [scheme, token] = header.split(/\s+/);
+  if (!/^Bearer$/i.test(scheme || '') || !token) {
+    return unauthorized(res, 'Header Authorization phải có dạng: Bearer <token>');
+  }
 
-  // const isLocalhost =
-  // req.hostname === 'localhost' ||
-  // req.hostname === '127.0.0.1';
+  const isLocalhost =
+  req.hostname === 'localhost' ||
+  req.hostname === '127.0.0.1' || req.hostname === 'https://be-xnk-1.onrender.com';
 
-  // if (!isLocalhost && (!/^Bearer$/i.test(scheme || '') || !token)) {
-  //   return unauthorized(res, 'Header Authorization phải có dạng: Bearer <token>');
-  // }
+  if (!isLocalhost && (!/^Bearer$/i.test(scheme || '') || !token)) {
+    return unauthorized(res, 'Header Authorization phải có dạng: Bearer <token>');
+  }
 
   try {
     req.user = jwt.verify(token, secret);
