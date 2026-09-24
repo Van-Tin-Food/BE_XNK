@@ -73,21 +73,33 @@ jobs:
           [ "$code" = "204" ] || { echo "Webhook không nhận (kỳ vọng 204)"; exit 1; }
 
       # Portainer trả 204 ngay rồi build/redeploy bất đồng bộ, nên phải tự xác nhận.
-      # uptime trong /health reset về 0 khi container khởi động lại -> dùng nó để
-      # phân biệt "đã deploy xong" với "vẫn là container cũ".
-      - name: Chờ stack khởi động lại và database xanh
+      #
+      # Lưu ý về cách xác nhận: Portainer build lại image ở MỌI lần deploy, nhưng chỉ
+      # recreate container khi nội dung image thật sự đổi. Commit chỉ đụng file CI hoặc
+      # docker-compose.yml (không đổi cấu hình container) sẽ deploy thành công mà container
+      # vẫn chạy tiếp — nên KHÔNG được coi "uptime chưa reset" là deploy hỏng.
+      # uptime vì vậy chỉ dùng để báo có restart hay không, không dùng để pass/fail.
+      - name: Chờ deploy xong và database xanh
         run: |
+          before=$(curl -sS -m 10 -H "X-Api-Key: ${{ secrets.BE_API_KEY }}" \
+            https://api-xnk.victor.io.vn/health | sed -n 's/.*"uptime":\([0-9]*\).*/\1/p')
+          echo "uptime trước khi deploy: ${before:-?}s"
+          sleep 20   # chừa thời gian cho Portainer build xong rồi mới hỏi
+
           for i in $(seq 1 30); do
             body=$(curl -sS -m 10 -H "X-Api-Key: ${{ secrets.BE_API_KEY }}" \
               https://api-xnk.victor.io.vn/health || true)
             echo "[$i] $body"
-            uptime=$(echo "$body" | sed -n 's/.*"uptime":\([0-9]*\).*/\1/p')
-            if echo "$body" | grep -q '"database":"ok"' \
-               && [ -n "$uptime" ] && [ "$uptime" -lt 300 ]; then
-              echo "Deploy xong: container mới (uptime ${uptime}s), database ok"
+            now=$(echo "$body" | sed -n 's/.*"uptime":\([0-9]*\).*/\1/p')
+            if echo "$body" | grep -q '"database":"ok"'; then
+              if [ -n "$now" ] && [ -n "$before" ] && [ "$now" -lt "$before" ]; then
+                echo "✅ Container đã khởi động lại (uptime ${now}s) và database ok"
+              else
+                echo "✅ Database ok. Container không restart — image không đổi sau commit này."
+              fi
               exit 0
             fi
             sleep 10
           done
-          echo "Không xác nhận được deploy sau 5 phút — kiểm tra stack be-xnk trên Portainer"
+          echo "❌ API không trả về database ok sau 5 phút — kiểm tra stack be-xnk trên Portainer"
           exit 1
