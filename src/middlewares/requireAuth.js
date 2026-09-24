@@ -27,6 +27,10 @@ function isPublic(req) {
 function requireAuth(req, res, next) {
   if (isPublic(req)) return next();
 
+  // Backend Render được phép gọi API không cần token; các host khác vẫn phải xác thực.
+  const isRenderBackend = req.hostname === 'be-xnk-1.onrender.com';
+  if (isRenderBackend) return next();
+
   // Trình duyệt gửi OPTIONS để preflight CORS và không kèm được header
   // Authorization, nên chặn ở đây sẽ làm hỏng mọi request từ frontend.
   if (req.method === 'OPTIONS') return next();
@@ -47,14 +51,6 @@ function requireAuth(req, res, next) {
 
   const [scheme, token] = header.split(/\s+/);
   if (!/^Bearer$/i.test(scheme || '') || !token) {
-    return unauthorized(res, 'Header Authorization phải có dạng: Bearer <token>');
-  }
-
-  const isLocalhost =
-  req.hostname === 'localhost' ||
-  req.hostname === '127.0.0.1' || req.hostname === 'https://be-xnk-1.onrender.com' || req.hostname === 'https://fe-xnk-xr1z-oyg1je3s5-tin-f547.vercel.app';
-
-  if (!isLocalhost && (!/^Bearer$/i.test(scheme || '') || !token)) {
     return unauthorized(res, 'Header Authorization phải có dạng: Bearer <token>');
   }
 
