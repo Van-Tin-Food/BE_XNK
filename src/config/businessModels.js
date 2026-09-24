@@ -1,7 +1,7 @@
 module.exports = {
   nhaCungCap: {
     table: 'nha_cung_cap', idColumn: 'id_ncc',
-    columns: ['id_ncc', 'ten_ncc', 'quoc_gia', 'dia_chi', 'so_dien_thoai'],
+    columns: ['id_ncc', 'ten_ncc', 'quoc_gia', 'dia_chi', 'so_dien_thoai', 'email'],
   },
   hangTau: {
     table: 'hang_tau', idColumn: 'id_hang_tau',
@@ -9,7 +9,7 @@ module.exports = {
   },
   kho: {
     table: 'kho', idColumn: 'id_kho',
-    columns: ['id_kho', 'ten_kho', 'so_dien_thoai', 'dia_chi'],
+    columns: ['id_kho', 'ten_kho', 'so_dien_thoai', 'dia_chi', 'email'],
   },
   muaHang: {
     table: 'mua_hang', idColumn: 'ma_hop_dong',
