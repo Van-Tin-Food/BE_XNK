@@ -54,7 +54,7 @@ function publicUser(user) {
 
 async function login(username, password) {
   const result = await pool.query(
-    `SELECT id, name, username, password, role, session, created_at
+    `SELECT id, name, username, password, role, session, created_at, email
      FROM public.users WHERE username = $1`,
     [String(username).trim()],
   );
@@ -92,7 +92,7 @@ async function register({ name, username, password, role = 'user', session = 'vi
 
 async function getUsers() {
   const result = await pool.query(
-    `SELECT id, name, username, role, session, created_at
+    `SELECT id, name, username, role, session, created_at, email
      FROM public.users ORDER BY id ASC`,
   );
   return result.rows;
@@ -100,7 +100,7 @@ async function getUsers() {
 
 async function getUserById(id) {
   const result = await pool.query(
-    `SELECT id, name, username, role, session, created_at
+    `SELECT id, name, username, role, session, created_at, email
      FROM public.users WHERE id = $1`,
     [id],
   );
