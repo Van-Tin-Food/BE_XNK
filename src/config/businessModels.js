@@ -9,7 +9,7 @@ module.exports = {
   },
   kho: {
     table: 'kho', idColumn: 'id_kho',
-    columns: ['id_kho', 'ten_kho', 'so_dien_thoai', 'dia_chi', 'email'],
+    columns: ['id_kho', 'ten_kho', 'so_dien_thoai', 'dia_chi'],
   },
   muaHang: {
     table: 'mua_hang', idColumn: 'ma_hop_dong',
