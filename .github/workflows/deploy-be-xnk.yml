@@ -34,6 +34,8 @@ jobs:
   validate:
     name: Kiểm tra trước khi deploy
     runs-on: ubuntu-latest
+    outputs:
+      src_hash: ${{ steps.src_hash.outputs.value }}
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +58,15 @@ jobs:
       - name: Build thử image api
         run: docker build -f Dockerfile.api -t be-xnk-api:ci .
 
+      # Đọc thẳng vân tay từ image vừa build, không tính lại bằng tay: hai máy khác
+      # nhau chạy find/sort có thể ra thứ tự khác và làm hash lệch một cách vô lý.
+      - name: Lấy vân tay mã nguồn
+        id: src_hash
+        run: |
+          value=$(docker run --rm be-xnk-api:ci cat /app/SRC_HASH)
+          echo "value=$value" >> $GITHUB_OUTPUT
+          echo "Vân tay mã nguồn của bản này: $value"
+
       - name: Build thử image ocr
         run: docker build -f Dockerfile.ocr -t be-xnk-ocr:ci .
 
@@ -74,32 +85,33 @@ jobs:
 
       # Portainer trả 204 ngay rồi build/redeploy bất đồng bộ, nên phải tự xác nhận.
       #
-      # Lưu ý về cách xác nhận: Portainer build lại image ở MỌI lần deploy, nhưng chỉ
-      # recreate container khi nội dung image thật sự đổi. Commit chỉ đụng file CI hoặc
-      # docker-compose.yml (không đổi cấu hình container) sẽ deploy thành công mà container
-      # vẫn chạy tiếp — nên KHÔNG được coi "uptime chưa reset" là deploy hỏng.
-      # uptime vì vậy chỉ dùng để báo có restart hay không, không dùng để pass/fail.
-      - name: Chờ deploy xong và database xanh
+      # Xác nhận bằng /version chứ không bằng /health: Portainer từng nuốt lỗi deploy
+      # (pull access denied) và trả 204 như bình thường — container cũ vẫn chạy nên
+      # /health vẫn xanh và CI báo thành công nhầm. Vân tay mã nguồn thì chỉ đổi khi
+      # container thật sự chạy bản mới.
+      - name: Chờ /version khớp bản vừa push
         run: |
-          before=$(curl -sS -m 10 -H "X-Api-Key: ${{ secrets.BE_API_KEY }}" \
-            https://api-xnk.victor.io.vn/health | sed -n 's/.*"uptime":\([0-9]*\).*/\1/p')
-          echo "uptime trước khi deploy: ${before:-?}s"
+          want="${{ needs.validate.outputs.src_hash }}"
+          [ -n "$want" ] || { echo "Không lấy được vân tay từ job validate"; exit 1; }
+          echo "Chờ API báo srcHash = $want"
           sleep 20   # chừa thời gian cho Portainer build xong rồi mới hỏi
 
           for i in $(seq 1 30); do
-            body=$(curl -sS -m 10 -H "X-Api-Key: ${{ secrets.BE_API_KEY }}" \
-              https://api-xnk.victor.io.vn/health || true)
-            echo "[$i] $body"
-            now=$(echo "$body" | sed -n 's/.*"uptime":\([0-9]*\).*/\1/p')
-            if echo "$body" | grep -q '"database":"ok"'; then
-              if [ -n "$now" ] && [ -n "$before" ] && [ "$now" -lt "$before" ]; then
-                echo "✅ Container đã khởi động lại (uptime ${now}s) và database ok"
-              else
-                echo "✅ Database ok. Container không restart — image không đổi sau commit này."
-              fi
+            got=$(curl -sS -m 10 -H "X-Api-Key: ${{ secrets.BE_API_KEY }}" \
+              https://api-xnk.victor.io.vn/version \
+              | sed -n 's/.*"srcHash":"\([^"]*\)".*/\1/p' || true)
+            echo "[$i] đang chạy=${got:-<không đọc được>} | kỳ vọng=$want"
+            if [ "$got" = "$want" ]; then
+              echo "✅ Container đang chạy đúng mã nguồn vừa push"
+              health=$(curl -sS -m 10 -H "X-Api-Key: ${{ secrets.BE_API_KEY }}" \
+                https://api-xnk.victor.io.vn/health || true)
+              echo "$health"
+              echo "$health" | grep -q '"database":"ok"' \
+                || { echo "❌ Đã deploy nhưng database không ok"; exit 1; }
               exit 0
             fi
             sleep 10
           done
-          echo "❌ API không trả về database ok sau 5 phút — kiểm tra stack be-xnk trên Portainer"
+          echo "❌ Sau 5 phút API vẫn chạy mã nguồn cũ — Portainer không deploy."
+          echo "   Kiểm tra: docker logs portainer trên VM300 (lỗi deploy bị nuốt, chỉ hiện ở đó)."
           exit 1
