@@ -79,7 +79,8 @@ services:
     environment:
       PYTHON_OCR_HOST: 0.0.0.0
       PYTHON_OCR_PORT: 8001
-      open_router_key: ${open_router_key}
+      open_router_key1: ${open_router_key1}
+      open_router_key2: ${open_router_key2}
       OPENROUTER_MODEL_OCR: ${OPENROUTER_MODEL_OCR:-openai/gpt-4o-mini}
       appscript_key: ${APPSCRIPT_URL}
     # OCR xử lý ảnh tới 8 triệu pixel và render PDF ở 200 DPI. ThreadingHTTPServer

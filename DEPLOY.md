@@ -171,13 +171,14 @@ Cổng mở ra host đổi được bằng `API_PORT` trong `.env` mà không ph
 |------|:--------:|----------|---------|
 | `PYTHON_OCR_HOST` | **Có** | `127.0.0.1` | **Phải đặt `0.0.0.0`** |
 | `PYTHON_OCR_PORT` | Không | `8001` | |
-| `open_router_key` | **Có** | — | API key OpenRouter (chữ thường, đúng như trong code) |
+| `open_router_key1` | **Có** | — | API key OpenRouter chính |
+| `open_router_key2` | **Có** | — | API key dự phòng; được dùng khi key 1 trả 401/402/403/429 |
 | `OPENROUTER_MODEL_OCR` | Không | `openai/gpt-4o-mini` | Model dùng để bóc tách chứng từ |
 | `appscript_key` | Không | — | Hiện được đọc nhưng chưa sử dụng |
 | `tesseract_cmd` | Không | — | Không cần đặt; trong image đã có sẵn trong `PATH` |
 
 > **Lưu ý về cách đặt tên:** phía Python dùng tên biến **chữ thường**
-> (`open_router_key`, `appscript_key`), khác với phía Node dùng chữ hoa. Đây
+> (`open_router_key1`, `open_router_key2`, `appscript_key`), khác với phía Node dùng chữ hoa. Đây
 > không phải lỗi đánh máy — hãy giữ đúng như bảng trên.
 
 ### 4.2. Tạo `JWT_SECRET`
@@ -211,7 +212,8 @@ APPSCRIPT_URL=https://script.google.com/macros/s/<deployment-id>/exec
 APPS_SCRIPT_TIMEOUT=120000
 
 # ---------- OCR (Python) ----------
-open_router_key=sk-or-v1-<openrouter-api-key>
+open_router_key1=sk-or-v1-<openrouter-api-key-1>
+open_router_key2=sk-or-v1-<openrouter-api-key-2>
 OPENROUTER_MODEL_OCR=openai/gpt-4o-mini
 appscript_key=https://script.google.com/macros/s/<deployment-id>/exec
 PYTHON_OCR_URL=http://ocr:8001
@@ -286,7 +288,7 @@ container.
 
 **Bước 3.** Kéo xuống phần **Environment variables**, thêm từng biến trong
 [mục 4.3](#43-file-env-cho-stack). Với các giá trị nhạy cảm (mật khẩu DB,
-`JWT_SECRET`, `OPEN_ROUTER_KEY`), bấm biểu tượng con mắt để ẩn giá trị.
+`JWT_SECRET`, `open_router_key1`, `open_router_key2`), bấm biểu tượng con mắt để ẩn giá trị.
 
 **Bước 4.** Bấm **Deploy the stack**. Lần đầu sẽ mất vài phút vì phải build image
 và tải Tesseract.

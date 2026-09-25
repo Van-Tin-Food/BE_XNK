@@ -7,6 +7,7 @@ import statistics
 import tempfile
 import shutil
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from pathlib import Path
@@ -31,7 +32,14 @@ MAX_OCR_PIXELS = 8_000_000
 Image.MAX_IMAGE_PIXELS = 100_000_000
 
 load_dotenv()
-OPENROUTER_KEY = os.getenv("open_router_key", "").strip()
+OPENROUTER_KEYS = [
+    os.getenv("open_router_key1", "").strip(),
+    os.getenv("open_router_key2", "").strip(),
+]
+# Giữ tương thích khi chạy local với cấu hình cũ chỉ có một key.
+if not any(OPENROUTER_KEYS):
+    OPENROUTER_KEYS = [os.getenv("open_router_key", "").strip()]
+OPENROUTER_KEY_INDEX = 0
 APPSCRIPT_URL = os.getenv("appscript_key", "").strip()
 OPENROUTER_MODEL_OCR = os.getenv(
     "OPENROUTER_MODEL_OCR",
@@ -55,20 +63,31 @@ class OpenRouterError(RuntimeError):
         self.status_code = status_code
 
 
-def check_openrouter_key():
-    if not OPENROUTER_KEY:
-        return "fail: missing OPENROUTER_KEY"
+def check_openrouter_key(index, key):
+    if not key:
+        return f"key{index}: missing"
     try:
         response = requests.get(
             "https://openrouter.ai/api/v1/key",
-            headers={"Authorization": f"Bearer {OPENROUTER_KEY}"},
+            headers={"Authorization": f"Bearer {key}"},
             timeout=5,
         )
-        if response.ok:
-            return "ok"
-        return f"fail: HTTP {response.status_code}: {response.text[:200]}"
+        return (
+            f"key{index}: ok" if response.ok
+            else f"key{index}: fail HTTP {response.status_code}"
+        )
     except requests.RequestException as error:
-        return f"fail: {error}"
+        return f"key{index}: fail {error}"
+
+
+def check_openrouter_keys():
+    with ThreadPoolExecutor(max_workers=len(OPENROUTER_KEYS)) as executor:
+        results = list(executor.map(
+            check_openrouter_key,
+            range(1, len(OPENROUTER_KEYS) + 1),
+            OPENROUTER_KEYS,
+        ))
+    return ("ok" if any(result.endswith(": ok") for result in results) else "fail", results)
 
 
 DOCUMENTS = {
@@ -427,27 +446,44 @@ def extract_json(text, fields, as_array=False):
 
 def call_openrouter(prompt):
     """Gọi model OCR duy nhất và yêu cầu phản hồi JSON."""
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_KEY}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": OPENROUTER_MODEL_OCR,
-            "temperature": 0,
-            "max_tokens": 2048,
-            "response_format": {"type": "json_object"},
-            "messages": [{"role": "user", "content": prompt}],
-        },
-        timeout=120,
-    )
-    if not response.ok:
-        raise OpenRouterError(
-            response.status_code,
-            f"OpenRouter lỗi {response.status_code}: {response.text[:500]}"
+    global OPENROUTER_KEY_INDEX
+    if not any(OPENROUTER_KEYS):
+        raise OpenRouterError(500, "Thiếu open_router_key1 và open_router_key2")
+
+    last_error = None
+    key_count = len(OPENROUTER_KEYS)
+    for offset in range(key_count):
+        index = (OPENROUTER_KEY_INDEX + offset) % key_count
+        key = OPENROUTER_KEYS[index]
+        if not key:
+            continue
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OPENROUTER_MODEL_OCR,
+                "temperature": 0,
+                "max_tokens": 2048,
+                "response_format": {"type": "json_object"},
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=120,
         )
-    return response.json()["choices"][0]["message"]["content"]
+        if response.ok:
+            OPENROUTER_KEY_INDEX = index
+            return response.json()["choices"][0]["message"]["content"]
+
+        last_error = OpenRouterError(
+            response.status_code,
+            f"OpenRouter key{index + 1} lỗi {response.status_code}: {response.text[:500]}"
+        )
+        if response.status_code not in {401, 402, 403, 429}:
+            break
+
+    raise last_error or OpenRouterError(500, "Không có OpenRouter key khả dụng")
 
 
 def build_extraction_prompt(ocr_text, doc_type):
@@ -542,8 +578,8 @@ NỘI DUNG OCR:
 
 def analyze_with_openrouter(ocr_text, doc_type):
     """Trích xuất kết quả cuối bằng đúng một model OpenRouter."""
-    if not OPENROUTER_KEY:
-        raise ValueError("Thiếu open_router_key trong file .env")
+    if not any(OPENROUTER_KEYS):
+        raise ValueError("Thiếu open_router_key1 và open_router_key2 trong file .env")
     if doc_type not in DOCUMENTS:
         raise ValueError(f"Loại chứng từ không được hỗ trợ: {doc_type}")
 
@@ -579,8 +615,8 @@ def analyze_with_openrouter(ocr_text, doc_type):
     return result
 
 def analyze_with_openrouter(ocr_text, doc_type):
-    if not OPENROUTER_KEY:
-        raise ValueError("Thieu open_router_key trong file .env")
+    if not any(OPENROUTER_KEYS):
+        raise ValueError("Thieu open_router_key1 va open_router_key2 trong file .env")
     if doc_type not in DOCUMENTS:
         raise ValueError(f"Loai chung tu khong duoc ho tro: {doc_type}")
 
@@ -1159,11 +1195,11 @@ def analyze_payload(payload):
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
-            ai_check = check_openrouter_key()
+            ai_check, ai_details = check_openrouter_keys()
             return self.reply(200, {
                 "status": "ok" if ai_check == "ok" else "degraded",
                 "service": "python-ocr",
-                "checks": {"ai": ai_check},
+                "checks": {"ai": ai_check, "aiKeys": ai_details},
             })
         return self.reply(404, {"success": False, "message": "Route not found"})
 
