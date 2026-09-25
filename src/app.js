@@ -95,7 +95,7 @@ app.use('/api', businessRoutes);
 // container unhealthy. OCR chết chỉ hiện trong checks.ocr nhưng vẫn trả 200,
 // vì phần lớn API không phụ thuộc OCR.
 app.get(['/health', '/api/health'], async (req, res) => {
-  const checks = { database: 'unknown', ocr: 'unknown' };
+  const checks = { database: 'unknown', ocr: 'unknown', ai: 'unknown' };
 
   await Promise.all([
     pool.query('select 1')
@@ -108,16 +108,19 @@ app.get(['/health', '/api/health'], async (req, res) => {
         const response = await fetch(`${PYTHON_OCR_URL}/health`, {
           signal: controller.signal,
         });
+        const data = await response.json().catch(() => ({}));
         checks.ocr = response.ok ? 'ok' : `fail: HTTP ${response.status}`;
+        checks.ai = data.checks?.ai || (response.ok ? 'unknown' : checks.ocr);
       } catch (error) {
         checks.ocr = `fail: ${error.name === 'AbortError' ? 'timeout' : error.message}`;
+        checks.ai = checks.ocr;
       } finally {
         clearTimeout(timer);
       }
     })(),
   ]);
 
-  const healthy = checks.database === 'ok';
+  const healthy = checks.database === 'ok' && checks.ai === 'ok';
   return res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'degraded',
     node: 'ok',

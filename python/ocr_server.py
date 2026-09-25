@@ -47,6 +47,30 @@ SHEET_NAME = "TEST"
 OCR_CONFIDENCE_WARNING = 60
 AI_CONFIDENCE_WARNING = 75
 PI_CURRENCY = "USD"
+
+
+class OpenRouterError(RuntimeError):
+    def __init__(self, status_code, message):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def check_openrouter_key():
+    if not OPENROUTER_KEY:
+        return "fail: missing OPENROUTER_KEY"
+    try:
+        response = requests.get(
+            "https://openrouter.ai/api/v1/key",
+            headers={"Authorization": f"Bearer {OPENROUTER_KEY}"},
+            timeout=5,
+        )
+        if response.ok:
+            return "ok"
+        return f"fail: HTTP {response.status_code}: {response.text[:200]}"
+    except requests.RequestException as error:
+        return f"fail: {error}"
+
+
 DOCUMENTS = {
     "PI": ["Số HĐ", "Ngày HĐ PI","Nhà cung cấp","XUẤT XỨ"],
     "INV": ["INV","Ngày INV","Tên hàng","Item code","Giá tổng","Đơn giá",],
@@ -419,7 +443,8 @@ def call_openrouter(prompt):
         timeout=120,
     )
     if not response.ok:
-        raise RuntimeError(
+        raise OpenRouterError(
+            response.status_code,
             f"OpenRouter lỗi {response.status_code}: {response.text[:500]}"
         )
     return response.json()["choices"][0]["message"]["content"]
@@ -1134,9 +1159,11 @@ def analyze_payload(payload):
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
+            ai_check = check_openrouter_key()
             return self.reply(200, {
-                "status": "ok",
+                "status": "ok" if ai_check == "ok" else "degraded",
                 "service": "python-ocr",
+                "checks": {"ai": ai_check},
             })
         return self.reply(404, {"success": False, "message": "Route not found"})
 
@@ -1154,7 +1181,10 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
             self.reply(200, analyze_payload(payload))
         except Exception as error:
-            self.reply(400, {"success": False, "message": str(error)})
+            status = getattr(error, "status_code", 400)
+            status = status if 400 <= status <= 599 else 500
+            print(f"[OCR] request failed ({status}): {error}", flush=True)
+            self.reply(status, {"success": False, "message": str(error)})
 
     def reply(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

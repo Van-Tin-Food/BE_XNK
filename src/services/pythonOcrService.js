@@ -11,7 +11,11 @@ async function analyzeDocument(payload) {
       body: JSON.stringify(payload), signal: controller.signal,
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.message || `Python OCR HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(result.message || `Python OCR HTTP ${response.status}`);
+      error.statusCode = response.status;
+      throw error;
+    }
     return result;
   } finally { clearTimeout(timeout); }
 }

@@ -9,7 +9,12 @@ async function analyze(req, res) {
     const result = await analyzeDocument(input);
     return res.status(200).json(await normalizeOcrReferences(result));
   } catch (error) {
-    const status = /missing|thiếu|phải là|chỉ hỗ trợ|không phải|vượt quá/i.test(error.message) ? 400 : 502;
+    const status = Number.isInteger(error.statusCode)
+      ? error.statusCode
+      : /missing|thiếu|phải là|chỉ hỗ trợ|không phải|vượt quá/i.test(error.message)
+        ? 400
+        : 500;
+    console.error(`[ocr] analyze failed (${status}):`, error);
     return res.status(status).json({ success: false, message: error.message });
   }
 }
