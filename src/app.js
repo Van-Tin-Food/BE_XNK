@@ -55,7 +55,10 @@ const businessRoutes = require('./routes/businessRoutes');
 
 const app = express();
 const port = process.env.PORT || 5000;
-const PYTHON_OCR_URL = String(process.env.PYTHON_OCR_URL || 'http://127.0.0.1:8001')
+const defaultPythonOcrUrl = process.env.NODE_ENV === 'production'
+  ? 'http://be-xnk-ocr:8001'
+  : 'http://127.0.0.1:8001';
+const PYTHON_OCR_URL = String(process.env.PYTHON_OCR_URL || defaultPythonOcrUrl)
   .replace(/\/$/, '');
 
 // ========================================
